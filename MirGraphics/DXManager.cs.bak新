@@ -1,0 +1,2624 @@
+﻿using Client.MirControls;
+using Client.MirScenes;
+using SharpGen.Runtime;
+using System.Diagnostics;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
+using System.Numerics;
+using System.Runtime.InteropServices;
+using Vortice;
+using Vortice.D3DCompiler;
+using Vortice.Direct2D1;
+using Vortice.Direct3D11;
+using Vortice.Direct3D11.Debug;
+using Vortice.DirectWrite;
+using Vortice.DXGI;
+using Vortice.DXGI.Debug;
+using Vortice.Mathematics;
+using Vortice.WIC;
+
+namespace Client.MirGraphics
+{
+    class DXManager
+    {
+#if DEBUG
+        public static DxgiInfoManager? InfoManager => new DxgiInfoManager();
+#endif
+
+        public static List<MImage> TextureList = new List<MImage>();
+        public static List<MirControl> ControlList = new List<MirControl>();
+
+        /// <summary>
+        /// 通用设备
+        /// </summary>
+        public static Vortice.Direct3D11.ID3D11Device1 Device; // virtual representation of the GPU and its resources
+        /// <summary>
+        /// 通用设备上下文
+        /// </summary>
+        public static Vortice.Direct3D11.ID3D11DeviceContext1 DeviceContext; // represents the graphics processing for the pipeline
+        /// <summary>
+        /// 交换链1
+        /// </summary>
+        public static Vortice.DXGI.IDXGISwapChain1 DXGISwapChain;
+
+        public static Vortice.DXGI.IDXGIFactory2 DxgiFactory;
+        public static Vortice.DirectWrite.IDWriteFactory DwFactory;
+        public static Vortice.WIC.IWICImagingFactory WicFactory;
+
+        public static Vortice.DXGI.SwapChainDescription1 swapChainDescription;
+        public static Vortice.DXGI.IDXGISurface DXGISurface;
+
+        public static Vortice.Direct2D1.ID2D1Factory1 D2DFactory;
+        public static Vortice.Direct2D1.ID2D1Device D2D1Device;
+        public static Vortice.Direct2D1.ID2D1DeviceContext D2D1Context;
+
+        public static Vortice.Direct3D11.ID3D11Texture2D BackBuffer;
+        public static Vortice.Direct3D11.ID3D11Texture2D RadarTexture;
+        public static Vortice.Direct3D11.ID3D11Texture2D PoisonDotBackground;
+        public static Vortice.Direct3D11.ID3D11Texture2D FloorTexture, LightTexture;
+        public static List<Vortice.Direct3D11.ID3D11Texture2D> Lights = new List<Vortice.Direct3D11.ID3D11Texture2D>();
+
+        public static Vortice.Direct3D11.ID3D11RenderTargetView CurrentSurface;
+        public static Vortice.Direct3D11.ID3D11RenderTargetView MainSurface;
+        public static Vortice.Direct3D11.ID3D11RenderTargetView FloorSurface, LightSurface;
+
+        public static Vortice.Direct3D11.ID3D11Texture2D DepthStencilTexture;
+        public static Vortice.Direct3D11.ID3D11DepthStencilView DepthStencilView;
+
+        public static Vortice.Direct2D1.ID2D1RenderTarget Sprite;
+        public static Vortice.Direct2D1.RenderTargetProperties SpriteRenderTargetProperties;
+
+        public static Vortice.Direct2D1.ID2D1SolidColorBrush TextBrush;
+
+        #region 着色器
+
+        /// <summary>
+        /// 顶点着色器
+        /// </summary>
+        public static Vortice.Direct3D11.ID3D11VertexShader GrayScaleVertexShader;
+        public static Vortice.Direct3D11.ID3D11VertexShader NormalVertexShader;
+        public static Vortice.Direct3D11.ID3D11VertexShader MagicVertexShader;
+        /// <summary>
+        /// 像素着色器
+        /// </summary>
+        public static Vortice.Direct3D11.ID3D11PixelShader GrayScalePixelShader;
+        public static Vortice.Direct3D11.ID3D11PixelShader NormalPixelShader;
+        public static Vortice.Direct3D11.ID3D11PixelShader MagicPixelShader;
+        /// <summary>
+        /// 输入布局
+        /// </summary>
+        public static Vortice.Direct3D11.ID3D11InputLayout GrayScaleIL;
+        public static Vortice.Direct3D11.ID3D11InputLayout NormalIL;
+        public static Vortice.Direct3D11.ID3D11InputLayout MagicIL;
+
+        #endregion
+
+        private Stopwatch clock;
+
+        /// <summary>
+        /// 表格顶点缓冲区大小
+        /// </summary>
+        public static int lineVerticesBufferSize;
+        /// <summary>
+        /// 折线顶点缓冲区大小
+        /// </summary>
+        public static int signalVerticesBufferSize;
+
+        /// <summary>
+        /// 文字用格式
+        /// </summary>
+        public static Vortice.DirectWrite.IDWriteTextFormat TextFormat;
+
+        /// <summary>
+        /// 折线顶点数据缓冲区
+        /// </summary>
+        public static ID3D11Buffer signalBuffer;
+        /// <summary>
+        /// 表格顶点数据缓冲区
+        /// </summary>
+        public static ID3D11Buffer gridBuffer;
+
+        /// <summary>
+        /// 用来存储线条、表格2D呈现所需数据（常量数据缓冲区）
+        /// </summary>
+        public static ID3D11Buffer constantBuffer2;
+
+        /// <summary>
+        /// 调试接口
+        /// </summary>
+        public static ID3D11Debug debugInterface;
+
+        /// <summary>
+        /// 纹理管理器（3D加载外部图片用到）
+        /// </summary>
+        public static TextureManager textureManager;
+        /// <summary>
+        /// 纹理（3D加载外部图片用到）
+        /// </summary>
+        private ID3D11Texture2D texture;
+
+        private float eyeX;
+        private float eyeY;
+        private float eyeZ = 2;
+        private float atX;
+        private float atY;
+        private float atZ;
+        private float upX;
+        private float upY = 1;
+        private float upZ;
+
+        // list of featureLevels this app can support
+        public static readonly Vortice.Direct3D.FeatureLevel[] FeatureLevels = {
+        Vortice.Direct3D.FeatureLevel.Level_12_1,
+        Vortice.Direct3D.FeatureLevel.Level_12_0,
+        Vortice.Direct3D.FeatureLevel.Level_11_1,
+        Vortice.Direct3D.FeatureLevel.Level_11_0,
+        Vortice.Direct3D.FeatureLevel.Level_10_1,
+        Vortice.Direct3D.FeatureLevel.Level_10_0,
+        Vortice.Direct3D.FeatureLevel.Level_9_3,
+        Vortice.Direct3D.FeatureLevel.Level_9_2,
+        Vortice.Direct3D.FeatureLevel.Level_9_1,
+    };
+
+
+        public struct VorticeParameters
+        {
+            public bool inited { get; set; }
+            public bool Windowed { get; set; }
+            public int BackBufferWidth { get; set; }
+            public int BackBufferHeight { get; set; }
+            public int PresentationInterval { get; set; }
+        }
+        public static VorticeParameters Parameters;
+        public static bool DeviceLost;
+        public static float Opacity = 1F;
+        public static bool Blending;
+        public static float BlendingRate;
+        public static BlendMode BlendingMode;
+        public static bool GrayScale;
+        public static Point[] LightSizes =
+        {
+            new Point(125,95),
+            new Point(205,156),
+            new Point(285,217),
+            new Point(365,277),
+            new Point(445,338),
+            new Point(525,399),
+            new Point(605,460),
+            new Point(685,521),
+            new Point(765,581),
+            new Point(845,642),
+            new Point(925,703)
+        };
+
+        public static void Create()
+        {
+            /*
+             * 1. 创建"设备"和"设备上下文"；
+             * 2. 如果"硬件"方式创建"设备"失败，则改用WARP方式（即软件方式）创建；
+             * 3. 创建"交换链描述"和"交换链全屏描述"；
+             * 4. 然后根据窗体句柄的"描述"创建"交换链"；
+             * 5. 创建设置"后缓冲区"作为RenderTargetView；
+             */
+
+            // 创建工厂（通用）
+            DxgiFactory = DXGI.CreateDXGIFactory1<IDXGIFactory2>();
+            DwFactory = DWrite.DWriteCreateFactory<IDWriteFactory>();
+            //using var direct2DFactory = D2D1.D2D1CreateFactory<ID2D1Factory>();
+
+            D2DFactory = D2D1.D2D1CreateFactory<ID2D1Factory1>();
+            //D2D1Device = D2DFactory.CreateDevice(Device.QueryInterface<IDXGIDevice>());
+            //D2D1Context = D2D1Device.CreateDeviceContext();
+
+            // This flag adds support for surfaces with a color-channel ordering different
+            // from the API default. It is required for compatibility with Direct2D.
+            var deviceCreationFlags = DeviceCreationFlags.BgraSupport;
+#if DEBUG
+            if (D3D11.SdkLayersAvailable())
+            {
+                deviceCreationFlags |= DeviceCreationFlags.Debug;
+            }
+#endif
+
+            //获取硬件适配器（通用）
+            using IDXGIAdapter1 adapter = GetHardwareAdapter();
+
+            //创建设备、设备上下文（通用）
+            if (D3D11.D3D11CreateDevice(null, Vortice.Direct3D.DriverType.Hardware, deviceCreationFlags, FeatureLevels,
+                    out ID3D11Device tempDevice, out Vortice.Direct3D.FeatureLevel featureLevel, out ID3D11DeviceContext tempContext).Failure)
+            {
+                // Handle device interface creation failure if it occurs.
+                // For example, reduce the feature level requirement, or fail over 
+                // to WARP rendering.
+                D3D11.D3D11CreateDevice(null, Vortice.Direct3D.DriverType.Warp, deviceCreationFlags, FeatureLevels,
+                    out tempDevice, out featureLevel, out tempContext).CheckError();
+            }
+
+            string resolution = "<not available>";
+            if (adapter != null && adapter.EnumOutputs(0, out IDXGIOutput output).Success)
+            {
+                resolution = $"{output.Description.DesktopCoordinates.Right} x {output.Description.DesktopCoordinates.Bottom}";
+            }
+
+            Device = tempDevice.QueryInterface<ID3D11Device1>();
+            DeviceContext = tempContext.QueryInterface<ID3D11DeviceContext1>();
+            tempContext.Dispose();
+            tempDevice.Dispose();
+
+            //纹理管理器
+            textureManager = new TextureManager(Device);
+
+#if DEBUG
+            if (D3D11.SdkLayersAvailable())
+            {
+                //调试接口（通用）
+                debugInterface = Device.QueryInterface<ID3D11Debug>();
+            }
+#endif
+
+            SwapChainDescription1 swapChainDescription = new()
+            {
+                Width = (uint)Program.Form.Width,
+                Height = (uint)Program.Form.Height,
+                Format = Format.B8G8R8A8_UNorm,
+                BufferCount = 2,
+                BufferUsage = Usage.RenderTargetOutput,
+                SampleDescription = SampleDescription.Default,
+                Scaling = Scaling.Stretch,
+                SwapEffect = SwapEffect.FlipDiscard,
+                AlphaMode = AlphaMode.Ignore
+            };
+
+            SwapChainFullscreenDescription fullscreenDescription = new() { Windowed = true };
+
+            //创建交换链（通用）
+            DXGISwapChain = DxgiFactory.CreateSwapChainForHwnd(Device, Program.Form.Handle, swapChainDescription, fullscreenDescription);
+
+            //控件关联IDXG工厂（用于取消alt+enter全屏热键）（通用）
+            DxgiFactory.MakeWindowAssociation(Program.Form.Handle, WindowAssociationFlags.IgnoreAltEnter);
+
+            ////创建渲染目标纹理、渲染目标视图（通用）
+            //BackBuffer = DXGISwapChain.GetBuffer<ID3D11Texture2D>(0);
+            //MainSurface = Device.CreateRenderTargetView(BackBuffer);
+            //CurrentSurface = MainSurface;
+
+            ////创建深度模板纹理、深度模板视图（通用）
+            //DepthStencilTexture = Device.CreateTexture2D(Format.D32_Float, (uint)Program.Form.Width, (uint)Program.Form.Height, 1, 1, null, BindFlags.DepthStencil);
+            //DepthStencilView = Device.CreateDepthStencilView(DepthStencilTexture!, new DepthStencilViewDescription(DepthStencilTexture, DepthStencilViewDimension.Texture2D));
+
+            #region 画文字专用
+
+            ////文字格式（用于画文字）
+            //TextFormat = DwFactory.CreateTextFormat("Arial", 20.0f);
+            //TextFormat.TextAlignment = TextAlignment.Center;
+            //TextFormat.ParagraphAlignment = ParagraphAlignment.Center;
+
+            ////以下创建渲染目标（用于画文字）
+            //RenderTargetProperties renderTargetProperties = new()
+            //{
+            //    Type = RenderTargetType.Default,
+            //    DpiX = 96,
+            //    DpiY = 96,
+            //    PixelFormat = Vortice.DCommon.PixelFormat.Premultiplied
+            //};
+            //var backBuffer = DXGISwapChain.GetBuffer<IDXGISurface>(0);
+            //Sprite = direct2DFactory.CreateDxgiSurfaceRenderTarget(backBuffer, renderTargetProperties);
+
+            #endregion
+
+            #region 折线数据源
+
+            ////为折线网格数据创建顶点缓冲区
+            //signalVerticesBufferSize = 10;
+            //MeshData signal = MeshUtilities.CreateSignal();
+            ////折线顶点数据缓冲区
+            //signalBuffer = Device.CreateBuffer(signal.VerticesColor, BindFlags.VertexBuffer);
+
+            #endregion
+
+            #region 表格数据源
+
+            ////为表格网格数据创建顶点缓冲区
+            //lineVerticesBufferSize = 90;
+            //MeshData grid = MeshUtilities.CreateGrid();//表格数据源
+            //                                           //表格顶点数据缓冲区
+            //gridBuffer = Device.CreateBuffer(grid.VerticesColor, BindFlags.VertexBuffer);
+            ////折线、表格常量数据缓冲区
+            //constantBuffer2 = Device.CreateConstantBuffer<Matrix4x4>();//表格数据源使用
+
+            #endregion
+
+            #region 备份
+
+            //DxgiFactory = Vortice.DXGI.DXGI.CreateDXGIFactory1<Vortice.DXGI.IDXGIFactory2>();
+            //var hardwareAdapter = GetHardwareAdapter(DxgiFactory).ToList().FirstOrDefault();
+            //if (hardwareAdapter == null)
+            //{
+            //    throw new InvalidOperationException("Cannot detect D3D11 adapter");
+            //}
+            //Vortice.Direct3D.FeatureLevel[] featureLevels = new[]
+            //{
+            //    Vortice.Direct3D.FeatureLevel.Level_11_1,
+            //    Vortice.Direct3D.FeatureLevel.Level_11_0,
+            //    Vortice.Direct3D.FeatureLevel.Level_10_1,
+            //    Vortice.Direct3D.FeatureLevel.Level_10_0,
+            //    Vortice.Direct3D.FeatureLevel.Level_9_3,
+            //    Vortice.Direct3D.FeatureLevel.Level_9_2,
+            //    Vortice.Direct3D.FeatureLevel.Level_9_1,
+            //};
+            //Vortice.DXGI.IDXGIAdapter1 adapter = hardwareAdapter;
+            //Vortice.Direct3D11.DeviceCreationFlags creationFlags = Vortice.Direct3D11.DeviceCreationFlags.BgraSupport | Vortice.Direct3D11.DeviceCreationFlags.Debug;
+            //var result = Vortice.Direct3D11.D3D11.D3D11CreateDevice
+            //(
+            //    adapter,
+            //    Vortice.Direct3D.DriverType.Unknown,
+            //    creationFlags,
+            //    featureLevels,
+            //    out Vortice.Direct3D11.ID3D11Device d3D11Device, out Vortice.Direct3D.FeatureLevel featureLevel,
+            //    out Vortice.Direct3D11.ID3D11DeviceContext d3D11DeviceContext
+            //);
+            //if (result.Failure)
+            //{
+            //    result = Vortice.Direct3D11.D3D11.D3D11CreateDevice(
+            //        IntPtr.Zero,
+            //        Vortice.Direct3D.DriverType.Warp,
+            //        creationFlags,
+            //        featureLevels,
+            //        out d3D11Device, out featureLevel, out d3D11DeviceContext);
+            //    result.CheckError();
+            //}
+            //d3D11Device.QueryInterface<ID3D11Debug>().FeatureMask = 0x1; //对应D3D11_DEBUG_FEATURE_TRACK_RESOURCE_LIFETIME
+
+            //Device = d3D11Device;
+            //DeviceContext = d3D11DeviceContext;
+            //Vortice.DXGI.Format colorFormat = Vortice.DXGI.Format.B8G8R8A8_UNorm;//B8G8R8A8_UNorm、R8G8B8A8_UNorm、
+            //const int FrameCount = 2;//大部分应用来说，至少需要两个缓存
+            //swapChainDescription = new()
+            //{
+            //    Width = (uint)Program.Form.Width,
+            //    Height = (uint)Program.Form.Height,
+            //    Format = colorFormat,
+            //    BufferCount = FrameCount,
+            //    BufferUsage = Vortice.DXGI.Usage.RenderTargetOutput,
+            //    SampleDescription = Vortice.DXGI.SampleDescription.Default,
+            //    Scaling = Vortice.DXGI.Scaling.Stretch,
+            //    SwapEffect = Vortice.DXGI.SwapEffect.FlipDiscard,
+            //    AlphaMode = Vortice.DXGI.AlphaMode.Ignore
+            //};
+            //Vortice.DXGI.SwapChainFullscreenDescription fullscreenDescription = new Vortice.DXGI.SwapChainFullscreenDescription
+            //{
+            //    Windowed = true
+            //};
+            //DXGISwapChain = DxgiFactory.CreateSwapChainForHwnd(Device, Program.Form.Handle, swapChainDescription, fullscreenDescription);
+            //DxgiFactory.MakeWindowAssociation(Program.Form.Handle, Vortice.DXGI.WindowAssociationFlags.IgnoreAltEnter);
+
+
+            //D2DFactory = D2D1.D2D1CreateFactory<ID2D1Factory1>();
+            //D2D1Device = D2DFactory.CreateDevice(Device.QueryInterface<IDXGIDevice>());
+            //D2D1Context = D2D1Device.CreateDeviceContext();
+
+            //WicFactory = new Vortice.WIC.IWICImagingFactory();
+            //DwFactory = Vortice.DirectWrite.DWrite.DWriteCreateFactory<IDWriteFactory>();
+
+            #endregion
+
+            LoadTextures();
+            LoadPixelsShaders();
+        }
+
+        private static Span<byte> CompileBytecode(string shaderName, string entryPoint, string profile)
+        {
+            //string assetsPath = Path.Combine(AppContext.BaseDirectory, "Assets");
+            string shaderFile = Path.Combine(Settings.ShadersPath, shaderName);
+            if (System.IO.File.Exists(shaderFile))
+            {
+                Compiler.CompileFromFile(shaderFile, entryPoint, profile, out Vortice.Direct3D.Blob blob, out _);
+                return blob.AsBytes();
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        private static IDXGIAdapter1 GetHardwareAdapter()
+        {
+            /*
+             * Try to get a high performance hardware adapter 
+             * return null if no hardware adapter has been found
+             */
+
+            IDXGIAdapter1 adapter = null;
+            DXGI.CreateDXGIFactory1<IDXGIFactory6>(out var factory6);
+            if (factory6 != null)
+            {
+                for (int adapterIndex = 0; factory6.EnumAdapterByGpuPreference((uint)adapterIndex, GpuPreference.HighPerformance, out adapter).Success; adapterIndex++)
+                {
+                    if (adapter == null)
+                    {
+                        continue;
+                    }
+
+                    AdapterDescription1 desc = adapter.Description1;
+                    if ((desc.Flags & AdapterFlags.Software) != AdapterFlags.None)
+                    {
+                        // Don't select the Basic Render Driver adapter.
+                        adapter.Dispose();
+                        continue;
+                    }
+
+                    factory6.Dispose();
+
+                    return adapter;
+                }
+            }
+
+            if ((adapter == null) && (factory6 != null))
+            {
+                for (int adapterIndex = 0; factory6.EnumAdapters1((uint)adapterIndex, out adapter).Success; adapterIndex++)
+                {
+                    AdapterDescription1 desc = adapter.Description1;
+                    if ((desc.Flags & AdapterFlags.Software) != AdapterFlags.None)
+                    {
+                        // Don't select the Basic Render Driver adapter.
+                        adapter.Dispose();
+                        continue;
+                    }
+
+                    factory6.Dispose();
+
+                    return adapter;
+                }
+            }
+
+            factory6?.Dispose();
+
+            return adapter;
+        }
+
+        private static unsafe void LoadPixelsShaders()
+        {
+            //从文件加载着色器文件
+            Span<byte> VSPositionColorNormal = CompileBytecode("normal.hlsl", "main", "vs_4_0");
+            Span<byte> PSPositionColorNormal = CompileBytecode("normal.hlsl", "main", "ps_4_0");
+
+            Span<byte> VSPositionColorMagic = CompileBytecode("magic.hlsl", "main", "vs_4_0");
+            Span<byte> PSPositionColorMagic = CompileBytecode("magic.hlsl", "main", "ps_4_0");
+
+            Span<byte> VSPositionColorGrayScale = CompileBytecode("grayscale.hlsl", "main", "vs_4_0");
+            Span<byte> PSPositionColorGrayScale = CompileBytecode("grayscale.hlsl", "main", "ps_4_0");
+
+            //为PositionColor.hlsl创建顶点着色器、像素着色器、输入布局
+            //通用顶点着色器
+            if(VSPositionColorNormal!=null)
+            {
+                NormalVertexShader = Device.CreateVertexShader(VSPositionColorNormal);
+                //通用输入布局
+                NormalIL = Device.CreateInputLayout(VertexPositionColor.InputElements, VSPositionColorNormal);
+            }
+            if (VSPositionColorMagic != null)
+            {
+                MagicVertexShader = Device.CreateVertexShader(VSPositionColorMagic);
+                //通用输入布局
+                MagicIL = Device.CreateInputLayout(VertexPositionColor.InputElements, VSPositionColorNormal);
+            }
+            if (VSPositionColorGrayScale != null)
+            {
+                GrayScaleVertexShader = Device.CreateVertexShader(VSPositionColorGrayScale);
+                //通用输入布局
+                GrayScaleIL = Device.CreateInputLayout(VertexPositionColor.InputElements, VSPositionColorNormal);
+            }
+            //通用像素着色器
+            if (PSPositionColorNormal != null)
+            {
+                NormalPixelShader = Device.CreatePixelShader(PSPositionColorNormal);
+            }
+            if (PSPositionColorMagic != null)
+            {
+                MagicPixelShader = Device.CreatePixelShader(PSPositionColorMagic);
+            }
+            if (PSPositionColorGrayScale != null)
+            {
+                GrayScalePixelShader = Device.CreatePixelShader(PSPositionColorGrayScale);
+            }
+
+
+            //var shaderNormalPath = Settings.ShadersPath + "normal.ps";
+            ////var shaderGrayScalePath = Settings.ShadersPath + "grayscale.ps";
+            //var shaderGrayScalePath = Settings.ShadersPath + "grayscale.hlsl";
+            //var shaderMagicPath = Settings.ShadersPath + "magic.ps";
+
+            //if (System.IO.File.Exists(shaderNormalPath))
+            //{
+            //    byte[] psBytecode = File.ReadAllBytes(shaderNormalPath);
+            //    NormalPixelShader = Device.CreatePixelShader(psBytecode);
+            //}
+            //if (System.IO.File.Exists(shaderGrayScalePath))
+            //{
+            //    //使用转换后的"ps_4_0"版本hlsl文件代替
+            //    var compilationResult = Vortice.D3DCompiler.Compiler.CompileFromFile(
+            //        shaderGrayScalePath,
+            //        "main",
+            //        "ps_4_0",
+            //        ShaderFlags.OptimizationLevel3
+            //    );
+            //    GrayScalePixelShader = Device.CreatePixelShader(compilationResult.Span);
+            //}
+            //if (System.IO.File.Exists(shaderMagicPath))
+            //{
+            //    byte[] psBytecode = File.ReadAllBytes(shaderMagicPath);
+            //    MagicPixelShader = Device.CreatePixelShader(psBytecode);
+            //}
+        }
+
+        private static unsafe void LoadTextures()
+        {
+            //创建渲染目标纹理、渲染目标视图（通用）
+            BackBuffer = DXGISwapChain.GetBuffer<Vortice.Direct3D11.ID3D11Texture2D>(0);
+            MainSurface = Device.CreateRenderTargetView(BackBuffer);
+            CurrentSurface = MainSurface;
+
+            //创建渲染目标
+            DXGISurface = DXGISwapChain.GetBuffer<Vortice.DXGI.IDXGISurface>(0);
+            //DXGISurface = BackBuffer.QueryInterface<Vortice.DXGI.IDXGISurface>();//或者这样取值
+            SpriteRenderTargetProperties = new RenderTargetProperties(
+                new Vortice.DCommon.PixelFormat(Format.B8G8R8A8_UNorm, Vortice.DCommon.AlphaMode.Premultiplied));
+            Sprite = D2DFactory.CreateDxgiSurfaceRenderTarget(DXGISurface, SpriteRenderTargetProperties);
+
+            //创建深度模板纹理、深度模板视图（通用）
+            DepthStencilTexture = Device.CreateTexture2D(Format.D24_UNorm_S8_UInt‌, (uint)Program.Form.Width, 
+                (uint)Program.Form.Height, 1, 1, null, BindFlags.DepthStencil);
+            DepthStencilView = Device.CreateDepthStencilView(DepthStencilTexture!, 
+                new Vortice.Direct3D11.DepthStencilViewDescription(DepthStencilTexture, Vortice.Direct3D11.DepthStencilViewDimension.Texture2D));
+
+            //文字格式（用于画文字）
+            TextFormat = DwFactory.CreateTextFormat("Arial", 20.0f);
+            TextFormat.TextAlignment = TextAlignment.Center;
+            TextFormat.ParagraphAlignment = ParagraphAlignment.Center;
+
+            if (RadarTexture == null || RadarTexture.Device == null)
+            {
+                //创建雷达纹理
+                var radarDesc = new Vortice.Direct3D11.Texture2DDescription
+                {
+                    Width = 2,
+                    Height = 2,
+                    MipLevels = 1,
+                    ArraySize = 1,
+                    Format = Vortice.DXGI.Format.B8G8R8A8_UNorm,
+                    SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
+                    //如果需要频繁更新的纹理，应使用Dynamic用法
+                    Usage = Vortice.Direct3D11.ResourceUsage.Dynamic,// 必须为Dynamic才能使用WriteDiscard
+                    BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource,
+                    CPUAccessFlags = CpuAccessFlags.Write, // 必须设置写访问
+                    MiscFlags = ResourceOptionFlags.None //MiscFlags.Shared?
+                };
+                RadarTexture = Device.CreateTexture2D(radarDesc);
+
+                //用白色背景填充雷达纹理
+                var stream = DeviceContext.Map(RadarTexture, 0, Vortice.Direct3D11.MapMode.WriteDiscard, Vortice.Direct3D11.MapFlags.None);
+                using (System.Drawing.Bitmap image = new System.Drawing.Bitmap(2, 2, (int)stream.RowPitch, System.Drawing.Imaging.PixelFormat.Format32bppArgb, stream.DataPointer))
+                using (Graphics graphics = Graphics.FromImage(image))
+                {
+                    graphics.Clear(System.Drawing.Color.White);
+                }
+                DeviceContext.Unmap(RadarTexture, 0);
+            }
+            if (PoisonDotBackground == null || PoisonDotBackground.Device == null)
+            {
+                //创建毒雾纹理
+                var PoisonDotBackgroundDesc = new Vortice.Direct3D11.Texture2DDescription
+                {
+                    Width = 5,
+                    Height = 5,
+                    MipLevels = 1,
+                    ArraySize = 1,
+                    Format = Vortice.DXGI.Format.B8G8R8A8_UNorm,
+                    SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
+                    //如果需要频繁更新的纹理，应使用Dynamic用法
+                    Usage = Vortice.Direct3D11.ResourceUsage.Dynamic,// 必须为Dynamic才能使用WriteDiscard
+                    BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource,
+                    CPUAccessFlags = CpuAccessFlags.Write, // 必须设置写访问
+                    MiscFlags = ResourceOptionFlags.None 
+                };
+                PoisonDotBackground = Device.CreateTexture2D(PoisonDotBackgroundDesc);
+
+                //用白色背景填充毒雾纹理
+                var stream = DeviceContext.Map(PoisonDotBackground,0,Vortice.Direct3D11.MapMode.WriteDiscard,Vortice.Direct3D11.MapFlags.None);
+                using (System.Drawing.Bitmap image = new System.Drawing.Bitmap(5,5,(int)stream.RowPitch,System.Drawing.Imaging.PixelFormat.Format32bppArgb,stream.DataPointer))
+                using (Graphics graphics = Graphics.FromImage(image))
+                {
+                    graphics.Clear(System.Drawing.Color.White);
+                }
+                DeviceContext.Unmap(PoisonDotBackground, 0);
+            }
+            CreateLights();
+        }
+
+        private unsafe static void CreateLights()
+        {
+
+            for (int i = Lights.Count - 1; i >= 0; i--)
+                Lights[i].Dispose();
+
+            Lights.Clear();
+
+            for (int i = 1; i < LightSizes.Length; i++)
+            {
+                int width = LightSizes[i].X;
+                int height = LightSizes[i].Y;
+
+                //创建灯光纹理
+                var lightDesc = new Vortice.Direct3D11.Texture2DDescription
+                {
+                    Width = (uint)width,
+                    Height = (uint)height,
+                    MipLevels = 1,
+                    ArraySize = 1,
+                    Format = Vortice.DXGI.Format.B8G8R8A8_UNorm,
+                    SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
+                    //如果需要频繁更新的纹理，应使用Dynamic用法
+                    Usage = Vortice.Direct3D11.ResourceUsage.Dynamic,// 必须为Dynamic才能使用WriteDiscard
+                    BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource,
+                    CPUAccessFlags = CpuAccessFlags.Write, // 必须设置写访问
+                    MiscFlags = ResourceOptionFlags.None //MiscFlags.Shared?
+                };
+                Vortice.Direct3D11.ID3D11Texture2D light = Device.CreateTexture2D(lightDesc);
+
+                //画灯光，复制进灯光纹理
+                var stream = DeviceContext.Map(light,0,Vortice.Direct3D11.MapMode.WriteDiscard,Vortice.Direct3D11.MapFlags.None);
+                using (System.Drawing.Bitmap image = new System.Drawing.Bitmap(width,height,width * 4,
+                    System.Drawing.Imaging.PixelFormat.Format32bppArgb,stream.DataPointer))
+                {
+                    using (Graphics graphics = Graphics.FromImage(image))
+                    {
+                        using (GraphicsPath path = new GraphicsPath())
+                        {
+                            path.AddEllipse(new Rectangle(0, 0, width, height));
+                            using (PathGradientBrush brush = new PathGradientBrush(path))
+                            {
+                                System.Drawing.Color[] blendColours = { System.Drawing.Color.White,
+                                                     System.Drawing.Color.FromArgb(255,210,210,210),
+                                                     System.Drawing.Color.FromArgb(255,160,160,160),
+                                                     System.Drawing.Color.FromArgb(255,70,70,70),
+                                                     System.Drawing.Color.FromArgb(255,40,40,40),
+                                                     System.Drawing.Color.FromArgb(0,0,0,0)};
+
+                                float[] radiusPositions = { 0f, .20f, .40f, .60f, .80f, 1.0f };
+
+                                ColorBlend colourBlend = new ColorBlend();
+                                colourBlend.Colors = blendColours;
+                                colourBlend.Positions = radiusPositions;
+
+                                graphics.Clear(System.Drawing.Color.FromArgb(0, 0, 0, 0));
+                                brush.InterpolationColors = colourBlend;
+                                brush.SurroundColors = blendColours;
+                                brush.CenterColor = System.Drawing.Color.White;
+                                graphics.FillPath(brush, path);
+                                graphics.Save();
+                            }
+                        }
+                    }
+                }
+                DeviceContext.Unmap(light, 0);
+                Lights.Add(light);
+            }
+        }
+
+        private static void BeforeRender()
+        {
+            //清理“渲染目标视图”和“深度模板视图”（除文字外通用）
+            //1、清理“渲染目标视图”
+            DeviceContext.ClearRenderTargetView(CurrentSurface, Colors.CornflowerBlue);
+            //2、清理“深度模板视图”
+            DeviceContext.ClearDepthStencilView(DepthStencilView, DepthStencilClearFlags.Depth, 1.0f, 0);
+
+            //设置渲染目标、视口和划片矩形（除文字外通用）
+            //1、设置渲染目标（渲染目标+深度模板）
+            DeviceContext.OMSetRenderTargets(CurrentSurface, DepthStencilView);
+            //2、设置视口
+            DeviceContext.RSSetViewport(new Viewport((uint)Program.Form.Width, (uint)Program.Form.Height));
+            //3、设置划片区域
+            DeviceContext.RSSetScissorRect(Program.Form.Width, Program.Form.Height);
+        }
+
+        public static void Render()
+        {
+            BeforeRender();
+
+            //1、（通用步骤）设置拓扑类型
+            //DeviceContext.IASetPrimitiveTopology(Vortice.Direct3D.PrimitiveTopology.LineList);
+            //2、（通用步骤）设置输入布局
+            //DeviceContext.IASetInputLayout(GrayScaleIL);
+            //DeviceContext.IASetInputLayout(NormalIL);
+            //DeviceContext.IASetInputLayout(MagicIL);
+            //3、（通用步骤）设置顶点数据缓冲区
+            //DeviceContext.IASetVertexBuffer(0, gridBuffer, (uint)VertexPositionColor.SizeInBytes);
+            //4、（通用步骤）设置顶点着色器
+            //DeviceContext.VSSetShader(GrayScaleVertexShader);
+            //DeviceContext.VSSetShader(NormalVertexShader);
+            //DeviceContext.VSSetShader(MagicVertexShader);
+            //5、设置常量数据缓冲区，设置常量缓冲区，即设置本次呈现数据源
+            //DeviceContext.VSSetConstantBuffer(1, constantBuffer2);
+            //6、（通用步骤）设置像素着色器
+            //DeviceContext.PSSetShader(GrayScalePixelShader);
+            //DeviceContext.PSSetShader(NormalPixelShader);
+            //DeviceContext.PSSetShader(MagicPixelShader);
+            //7、（2D通用步骤）画图像
+            //DeviceContext.Draw(lineVerticesBufferSize * 2, 0);
+
+            AfterRender();
+        }
+
+        private static void AfterRender()
+        {
+            //swapchain1呈现（通用）
+            Result result = DXGISwapChain.Present(1, PresentFlags.None);
+            if (result.Failure && (result.Code == Vortice.DXGI.ResultCode.DeviceRemoved.Code))
+            {
+                throw new Exception();
+            }
+        }
+
+        /// <summary>
+        /// 给CurrentSurface赋值
+        /// </summary>
+        /// <param name="surface"></param>
+        public static void SetSurface(ref Vortice.Direct3D11.ID3D11RenderTargetView surface)
+        {
+            if (CurrentSurface == surface)
+                return;
+
+            //Sprite_Flush();
+            CurrentSurface = surface;
+
+            surface = Device.CreateRenderTargetView(DXGISwapChain.GetBuffer<Vortice.Direct3D11.ID3D11Texture2D>(0));
+        }
+
+        /// <summary>
+        /// 直接设置全局着色器
+        /// </summary>
+        /// <param name="value"></param>
+        public static void SetGrayscale(bool value)
+        {
+            GrayScale = value;
+
+            if (value == true)
+            {
+                if (DeviceContext.PSGetShader() == GrayScalePixelShader)
+                {
+                    return;
+                }
+                //Sprite_Flush();
+                DeviceContext.PSSetShader(GrayScalePixelShader, null, 0);  // 绑定到像素着色器阶段
+                //DeviceContext.PSSetShader(GrayScalePixelShader);
+            }
+            else
+            {
+                if (DeviceContext.PSGetShader() == null)
+                {
+                    return;
+                }
+                //Sprite_Flush();
+                DeviceContext.PSSetShader(null, null, 0);  // 绑定到像素着色器阶段
+            }
+        }
+
+
+        public static void DrawOpaque(Vortice.Direct3D11.ID3D11Texture2D textured, Rectangle? sourceRect, Vector3? position, System.Drawing.Color colord, float opacity)
+        {
+            // 为ShaderResource方式创建着色器资源视图
+            if (textured.Description.BindFlags == BindFlags.RenderTarget) //红屏
+            {
+                return;//测试
+            }
+            else if (textured.Description.BindFlags == BindFlags.ShaderResource)
+            {
+                var srvDesc = new Vortice.Direct3D11.ShaderResourceViewDescription
+                {
+                    Format = textured.Description.Format,
+                    ViewDimension = Vortice.Direct3D.ShaderResourceViewDimension.Texture2D,
+                    Texture2D = { MipLevels = 1 }
+                };
+                using var shaderResourceView = Device.CreateShaderResourceView(textured, srvDesc);
+                DeviceContext.PSSetShaderResource(0, shaderResourceView);
+            }
+
+            using var surface = textured.QueryInterface<IDXGISurface>();
+            var bitmapProps = new BitmapProperties
+            {
+                PixelFormat = SpriteRenderTargetProperties.PixelFormat
+            };
+            using var d2dBitmap = Sprite.CreateSharedBitmap(surface, bitmapProps);
+            Direct2DTextureRenderer.DrawTexture(Sprite, d2dBitmap, sourceRect, position, ToColor4_Vortice(colord));
+
+            CMain.DPSCounter++;
+
+        }
+
+        public static void Draw(Vortice.Direct3D11.ID3D11Texture2D textured, Rectangle? sourceRect, Vector3? position, System.Drawing.Color colord)
+        {
+            if (textured.Description.BindFlags == BindFlags.RenderTarget) //红屏
+            {
+                return;//测试
+            }
+            else if (textured.Description.BindFlags == BindFlags.ShaderResource)
+            {
+                var srvDesc = new Vortice.Direct3D11.ShaderResourceViewDescription
+                {
+                    Format = textured.Description.Format,
+                    ViewDimension = Vortice.Direct3D.ShaderResourceViewDimension.Texture2D,
+                    Texture2D = { MipLevels = 1 }
+                };
+                using var shaderResourceView = Device.CreateShaderResourceView(textured, srvDesc);
+                DeviceContext.PSSetShaderResource(0, shaderResourceView);
+            }
+
+            using var surface = textured.QueryInterface<IDXGISurface>();
+            var bitmapProps = new BitmapProperties
+            {
+                PixelFormat = SpriteRenderTargetProperties.PixelFormat
+            };
+            using var d2dBitmap = Sprite.CreateSharedBitmap(surface, bitmapProps);
+
+            // 设置绘制参数
+            Direct2DTextureRenderer.DrawTexture(Sprite, d2dBitmap, sourceRect, position, ToColor4_Vortice(colord));
+
+            CMain.DPSCounter++;
+        }
+
+
+        public static void AttemptReset()
+        {
+            try
+            {
+                DeviceLost = false;
+                if (Device.DeviceRemovedReason == SharpGen.Runtime.Result.Ok)
+                {
+                    return;
+                }
+                else if (Device.DeviceRemovedReason == SharpGen.Runtime.Result.False)
+                {
+                    ResetDevice();
+                    return;
+                }
+                else if (Device.DeviceRemovedReason == SharpGen.Runtime.Result.Fail
+                    || Device.DeviceRemovedReason == SharpGen.Runtime.Result.UnexpectedFailure)
+                {
+                    DeviceLost = false;
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+            }
+        }
+
+        public static void ResetDevice()
+        {
+            CleanUp();
+            DeviceLost = true;
+
+            System.Drawing.Size clientSize = Program.Form.ClientSize;
+            if (clientSize.Width == 0 || clientSize.Height == 0)
+                return;
+
+            Parameters.Windowed = !Settings.FullScreen;
+            Parameters.BackBufferWidth = clientSize.Width;
+            Parameters.BackBufferHeight = clientSize.Height;
+            Parameters.PresentationInterval = Settings.FPSCap ? 0 : -1;
+
+            LoadTextures();
+        }
+
+        public static void AttemptRecovery()
+        {
+            try
+            {
+                Sprite_End();
+            }
+            catch (Exception ex)
+            {
+            }
+
+            try
+            {
+                // 获取后缓冲区纹理
+                BackBuffer = DXGISwapChain.GetBuffer<Vortice.Direct3D11.ID3D11Texture2D>(0);
+                MainSurface = Device.CreateRenderTargetView(BackBuffer);
+                CurrentSurface = MainSurface;
+            }
+            catch (Exception ex)
+            {
+            }
+        }
+
+        public static void SetOpacity(float opacity)
+        {
+            if (Opacity == opacity)
+                return;
+
+            Sprite_Flush();
+
+            if (opacity >= 1 || opacity < 0)
+            {
+                //Device.SetRenderState(SlimDX.Direct3D9.RenderState.SourceBlend, SlimDX.Direct3D9.Blend.SourceAlpha);
+                //Device.SetRenderState(SlimDX.Direct3D9.RenderState.DestinationBlend, SlimDX.Direct3D9.Blend.InverseSourceAlpha);
+                //Device.SetRenderState(SlimDX.Direct3D9.RenderState.SourceBlendAlpha, SlimDX.Direct3D9.Blend.One);
+                //Device.SetRenderState(SlimDX.Direct3D9.RenderState.BlendFactor, Color.FromArgb(255, 255, 255, 255).ToArgb());
+
+                Device.ImmediateContext.OMSetBlendState(Device.CreateBlendState(new Vortice.Direct3D11.BlendDescription
+                {
+                    RenderTarget = new Vortice.Direct3D11.BlendDescription.RenderTarget__FixedBuffer()
+                    {
+                        e0 = new Vortice.Direct3D11.RenderTargetBlendDescription
+                        {
+                            BlendEnable = true,  // 对应D3DRS_ALPHABLENDENABLE
+                            SourceBlend = Vortice.Direct3D11.Blend.SourceAlpha,//SourceBlend=SourceAlpha
+                            DestinationBlend = Vortice.Direct3D11.Blend.InverseSourceAlpha,//DestinationBlend=InverseSourceAlpha
+                            SourceBlendAlpha = Vortice.Direct3D11.Blend.One,//SourceBlendAlpha=One
+                        }
+                    }
+                }), new Vortice.Mathematics.Color4(1.0f, 1.0f, 1.0f, 1.0f));//BlendFactor=Color.FromArgb(255, 255, 255, 255).ToArgb()// RGBA(255,255,255,255)
+            }
+            else
+            {
+                //Device.SetRenderState(SlimDX.Direct3D9.RenderState.SourceBlend, SlimDX.Direct3D9.Blend.BlendFactor);
+                //Device.SetRenderState(SlimDX.Direct3D9.RenderState.DestinationBlend, SlimDX.Direct3D9.Blend.InverseBlendFactor);
+                //Device.SetRenderState(SlimDX.Direct3D9.RenderState.SourceBlendAlpha, SlimDX.Direct3D9.Blend.SourceAlpha);
+                //Device.SetRenderState(SlimDX.Direct3D9.RenderState.BlendFactor, Color.FromArgb((byte)(255 * opacity), (byte)(255 * opacity), (byte)(255 * opacity), (byte)(255 * opacity)).ToArgb());
+
+                Device.ImmediateContext.OMSetBlendState(Device.CreateBlendState(new Vortice.Direct3D11.BlendDescription   //报错0x80070057，CreateBlendState参数错误
+                {
+                    RenderTarget = new Vortice.Direct3D11.BlendDescription.RenderTarget__FixedBuffer()
+                    {
+                        e0 = new Vortice.Direct3D11.RenderTargetBlendDescription
+                        {
+                            BlendEnable = true,  // 对应D3DRS_ALPHABLENDENABLE
+                            SourceBlend = Vortice.Direct3D11.Blend.BlendFactor,//SourceBlend=BlendFactor
+                            DestinationBlend = Vortice.Direct3D11.Blend.InverseBlendFactor,//DestinationBlend=InverseBlendFactor
+                            SourceBlendAlpha = Vortice.Direct3D11.Blend.SourceAlpha,//SourceBlendAlpha=SourceAlpha
+                        }
+                    }
+                }), new Vortice.Mathematics.Color4((byte)(255 * opacity), (byte)(255 * opacity), (byte)(255 * opacity), (byte)(255 * opacity)));
+            }
+            Opacity = opacity;
+            //Sprite.Flush();
+            Sprite_Flush();
+        }
+        public static void SetBlend(bool value, float rate = 1F, BlendMode mode = BlendMode.NORMAL)
+        {
+            if (value == Blending && BlendingRate == rate && BlendingMode == mode) 
+                return;
+
+            Blending = value;
+            BlendingRate = rate;
+            BlendingMode = mode;
+
+            Sprite_Flush();
+
+            Sprite_End();
+
+            if (Blending)
+            {
+                //Sprite.Begin(SlimDX.Direct3D9.SpriteFlags.DoNotSaveState);
+                SpriteBegin_DoNotSaveState();
+
+                //Device.SetRenderState(SlimDX.Direct3D9.RenderState.AlphaBlendEnable, true);
+                DeviceSetRenderState_AlphaBlendEnable(true);
+
+                switch (BlendingMode)
+                {
+                    case BlendMode.INVLIGHT:
+                        //Device.SetRenderState(SlimDX.Direct3D9.RenderState.BlendOperation, SlimDX.Direct3D9.BlendOperation.Add);
+                        //Device.SetRenderState(SlimDX.Direct3D9.RenderState.SourceBlend, SlimDX.Direct3D9.Blend.BlendFactor);
+                        //Device.SetRenderState(SlimDX.Direct3D9.RenderState.DestinationBlend, SlimDX.Direct3D9.Blend.InverseSourceColor);
+
+                        Device.ImmediateContext.OMSetBlendState(Device.CreateBlendState(new Vortice.Direct3D11.BlendDescription
+                        {
+                            RenderTarget = new Vortice.Direct3D11.BlendDescription.RenderTarget__FixedBuffer()
+                            {
+                                e0 = new Vortice.Direct3D11.RenderTargetBlendDescription
+                                {
+                                    //BlendEnable = true,  // 对应D3DRS_ALPHABLENDENABLE
+                                    BlendOperation = Vortice.Direct3D11.BlendOperation.Add,  //BlendOperation=Add
+                                    SourceBlend = Vortice.Direct3D11.Blend.BlendFactor,//SourceBlend=BlendFactor
+                                    DestinationBlend = Vortice.Direct3D11.Blend.InverseSourceColor,//DestinationBlend=InverseSourceColor
+                                }
+                            }
+                        }), new Vortice.Mathematics.Color4((byte)(255 * BlendingRate), (byte)(255 * BlendingRate), (byte)(255 * BlendingRate), (byte)(255 * BlendingRate)));
+                        break;
+                    default:
+                        //Device.SetRenderState(SlimDX.Direct3D9.RenderState.SourceBlend, SlimDX.Direct3D9.Blend.SourceAlpha);
+                        //Device.SetRenderState(SlimDX.Direct3D9.RenderState.DestinationBlend, SlimDX.Direct3D9.Blend.One);
+
+                        Device.ImmediateContext.OMSetBlendState(Device.CreateBlendState(new Vortice.Direct3D11.BlendDescription  //报错0x80070057，参数错误
+                        {
+                            RenderTarget = new Vortice.Direct3D11.BlendDescription.RenderTarget__FixedBuffer()
+                            {
+                                e0 = new Vortice.Direct3D11.RenderTargetBlendDescription
+                                {
+                                    //BlendEnable = true,  // 对应D3DRS_ALPHABLENDENABLE
+                                    SourceBlend = Vortice.Direct3D11.Blend.SourceAlpha,//SourceBlend=SourceAlpha
+                                    DestinationBlend = Vortice.Direct3D11.Blend.One,//DestinationBlend=One
+                                }
+                            }
+                        }), new Vortice.Mathematics.Color4((byte)(255 * BlendingRate), (byte)(255 * BlendingRate), (byte)(255 * BlendingRate), (byte)(255 * BlendingRate)));
+                        break;
+                }
+
+                //Device.SetRenderState(SlimDX.Direct3D9.RenderState.BlendFactor, Color.FromArgb((byte)(255 * BlendingRate), (byte)(255 * BlendingRate),
+                //                                                (byte)(255 * BlendingRate), (byte)(255 * BlendingRate)).ToArgb());
+            }
+            else
+            {
+                //Sprite.Begin(SlimDX.Direct3D9.SpriteFlags.AlphaBlend);
+                SpriteBegin_AlphaBlend();
+            }
+
+            //Device.SetRenderTarget(0, CurrentSurface);
+            CurrentSurface = Device.CreateRenderTargetView(DXGISwapChain.GetBuffer<Vortice.Direct3D11.ID3D11Texture2D>(0));
+        }
+
+        #region lyo：原方法快捷平替
+
+        public void DrawTextToTexture(ID2D1Bitmap textureBitmap, string text, System.Drawing.Font font,
+    System.Drawing.Color foreColor, System.Drawing.Color backColor, System.Drawing.Size size, DrawTextOptions drawOptions,
+    int outLine, System.Drawing.Color borderColor)
+        {
+            foreColor = System.Drawing.Color.White;
+            backColor = System.Drawing.Color.White;
+            borderColor = System.Drawing.Color.White;
+
+            // 开始绘制
+            //Sprite.BeginDraw();
+
+            //背景色
+            Sprite.Clear(new Vortice.Mathematics.Color4(
+                backColor.R / 255f,
+                backColor.G / 255f,
+                backColor.B / 255f,
+                backColor.A / 255f
+            ));
+            // 设置文本颜色
+            TextBrush.Color = new Vortice.Mathematics.Color4(
+                foreColor.R / 255.0f,
+                foreColor.G / 255.0f,
+                foreColor.B / 255.0f,
+                foreColor.A / 255.0f);
+            // 设置边框颜色
+            var _borderColor = new Vortice.Mathematics.Color4(
+                borderColor.R / 255.0f,
+                borderColor.G / 255.0f,
+                borderColor.B / 255.0f,
+                borderColor.A / 255.0f);
+
+            // 创建D2D文本格式
+            using (var textFormat = DXManager.DwFactory.CreateTextFormat(
+                font.FontFamily.Name,
+                font.Bold ? FontWeight.Bold : FontWeight.Normal,
+                font.Italic ? Vortice.DirectWrite.FontStyle.Italic : Vortice.DirectWrite.FontStyle.Normal,
+                font.Size))
+            {
+                textFormat.TextAlignment = TextAlignment.Leading;
+                textFormat.ParagraphAlignment = ParagraphAlignment.Near;
+
+                //画边框
+                // 计算文本边界（需配合DirectWrite测量）
+                using var borderBrush = Sprite.CreateSolidColorBrush(_borderColor);
+                var textLayout = DXManager.DwFactory.CreateTextLayout(text, textFormat, textureBitmap.Size.Width, textureBitmap.Size.Height);
+                var metrics = textLayout.Metrics;
+                switch (outLine)
+                {
+                    case 0://无边框
+                        break;
+                    case 1://普通边框
+                        // 扩展边界作为边框区域
+                        var borderRect = new Vortice.Mathematics.Rect(
+                            0 - 2,    // 左边距
+                            0 - 2,     // 上边距
+                            0 + metrics.Width + 4,  // 右边界
+                            0 + metrics.Height + 4   // 下边界
+                        );
+                        Sprite.DrawRectangle(borderRect, borderBrush, 1.5f);
+                        break;
+                    case 2://圆角矩形边框
+                        //// 绘制圆角矩形边框
+                        //Sprite.DrawRoundedRectangle(
+                        //    new RoundedRectangle(borderRect, 3, 3),  // 圆角半径
+                        //    TextBrush,
+                        //    2.0f  // 边框粗细
+                        //);
+                        break;
+                    case 3://虚线边框
+                        //// 虚线边框
+                        //var strokeStyle = Sprite.Factory.CreateStrokeStyle(new StrokeStyleProperties
+                        //{
+                        //    DashStyle = DashStyle.Dash
+                        //});
+                        //Sprite.DrawRectangle(borderRect, borderBrush, 1.5f, strokeStyle);
+                        break;
+                    case 4://渐变边框
+                        //// 渐变边框
+                        //using var gradientBrush = Sprite.CreateLinearGradientBrush(/* 渐变参数 */);
+                        //Sprite.DrawRectangle(borderRect, gradientBrush, 3.0f);
+                        break;
+                    default:
+                        break;
+                }
+
+                // 绘制文本
+                Sprite.DrawText(text, textFormat, new RawRectF(1, 0, size.Width, size.Height), TextBrush, drawOptions);
+            }
+            // 结束绘制
+            //Sprite.EndDraw();
+        }
+
+        public static ID2D1Bitmap CreateTextureBitmap(System.Drawing.Size size)
+        {
+            // 创建WIC位图
+            using (var wicBitmap = DXManager.WicFactory.CreateBitmap((uint)size.Width, (uint)size.Height,
+                Vortice.WIC.PixelFormat.Format32bppPBGRA, BitmapCreateCacheOption.CacheOnLoad))
+            {
+                // 从WIC位图创建D2D位图
+                return Sprite.CreateBitmapFromWicBitmap(wicBitmap);
+            }
+        }
+
+        public static ID3D11Texture2D CreateTextureFromBytes(byte[] data, uint width, uint height, ref nint point)
+        {
+            // 验证输入数据
+            if (data == null || data.Length == 0)
+                throw new ArgumentException("Invalid image data");
+
+            if (data.Length < width * height * 4)
+                throw new ArgumentException("Image data size does not match dimensions");
+
+            // 配置纹理描述 (关键修正点1)
+            var texDesc = new Vortice.Direct3D11.Texture2DDescription
+            {
+                Width = (uint)width,
+                Height = (uint)height,
+                MipLevels = 1,
+                ArraySize = 1,
+                Format = Vortice.DXGI.Format.B8G8R8A8_UNorm, // 对应A8R8G8B8格式
+                SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
+                Usage = Vortice.Direct3D11.ResourceUsage.Dynamic,// Pool.Managed等效配置
+                BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource,// Usage.None默认绑定
+                CPUAccessFlags = Vortice.Direct3D11.CpuAccessFlags.Write,
+                //MiscFlags = Vortice.Direct3D11.ResourceOptionFlags.None,
+            };
+
+            // 准备子资源数据 (关键修正点2)
+            var initData = new Vortice.Direct3D11.SubresourceData(Marshal.AllocHGlobal(data.Length), (uint)width * 4, 0);
+            point = initData.DataPointer;
+
+            try
+            {
+                // 复制数据到非托管内存
+                Marshal.Copy(data, 0, initData.DataPointer, data.Length);
+
+                // 创建纹理资源
+                return DXManager.Device.CreateTexture2D(texDesc, new[] { initData });
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(initData.DataPointer);
+            }
+        }
+
+        /// <summary>
+        /// 调试神器：获取调用链信息
+        /// </summary>
+        public static string PrintParentMethod()
+        {
+            var ret = "调用链:";
+            //// 获取当前方法调用的详细信息
+            //StackTrace stackTrace = new StackTrace(true);
+            //StackFrame[] stackFrames = stackTrace.GetFrames();
+
+            //// 通常我们关心的是除了当前方法之外的下一个方法，即父方法
+            //if (stackFrames != null && stackFrames.Length > 1)
+            //{
+            //    StackFrame pFrame = stackFrames[2]; // 获取调用栈中的第二个帧，即父方法
+            //    var pmethod = pFrame.GetMethod(); // 获取方法信息
+            //    var pdeclaringType = pmethod.DeclaringType; // 获取声明此方法的类型（类）
+            //    string pmethodName = pmethod.Name; // 获取方法名称
+            //    string ptypeName = pdeclaringType.Name; // 获取类型名称（类名）
+            //    string pnamespaceName = pdeclaringType.Namespace; // 获取命名空间
+
+            //    StackFrame frame = stackFrames[1]; // 获取调用栈中的第一个帧，即本方法
+            //    MethodBase method = frame.GetMethod(); // 获取方法信息
+            //    Type declaringType = method.DeclaringType; // 获取声明此方法的类型（类）
+            //    string methodName = method.Name; // 获取方法名称
+            //    string typeName = declaringType.Name; // 获取类型名称（类名）
+            //    string namespaceName = declaringType.Namespace; // 获取命名空间
+
+            //    //ret = $"{pnamespaceName}::{ptypeName}.{pmethodName}({pFrame.GetFileLineNumber()}) → {namespaceName}::{typeName}.{methodName}({frame.GetFileLineNumber()})";
+            //    ret = $"{ptypeName}.{pmethodName}({pFrame.GetFileLineNumber()}) → {typeName}.{methodName}({frame.GetFileLineNumber()})";
+            //}
+            return ret;
+        }
+
+        public static bool CheckDeviceLost()
+        {
+            try
+            {
+                var reason = Device.DeviceRemovedReason;
+                if (reason.Success)
+                    return false;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                return true;
+            }
+        }
+
+        public static bool QueryTextureStateFail(ID3D11Texture2D texture)
+        {
+            // 查询DXGI资源接口
+            try
+            {
+                var dxgiResource = texture.QueryInterface<IDXGIResource>();
+                dxgiResource.Release();
+                return false;
+            }
+            catch (Exception ex)
+            {
+                return true;
+            }
+        }
+
+        public static void LineDraw(System.Numerics.Vector2[] lines, System.Drawing.Color color)
+        {
+            DrawLines(lines, color);
+        }
+
+        public static void DrawLines(Vector2[] points, System.Drawing.Color color)
+        {
+
+            // 创建画刷
+            ID2D1SolidColorBrush brush = Sprite.CreateSolidColorBrush(
+                new Vortice.Mathematics.Color4(color.R / 255f, color.G / 255f, color.B / 255f, color.A / 255f)
+            );
+            // 绘制线段
+            for (int i = 0; i < points.Length - 1; i++)
+            {
+                Sprite.DrawLine(
+                    new Vector2(points[i].X, points[i].Y),
+                    new Vector2(points[i + 1].X, points[i + 1].Y),
+                    brush
+                );
+            }
+        }
+
+        public static unsafe Vortice.Direct3D11.ID3D11RenderTargetView GetSurfaceLevel(Vortice.Direct3D11.ID3D11Texture2D texture, int level)
+        {
+            if ((texture.Description.BindFlags & BindFlags.RenderTarget) == 0)
+            {
+                throw new InvalidOperationException("Texture was not created with RenderTarget bind flag");
+            }
+            // 创建RenderTargetView描述符
+            var rtvDesc = new Vortice.Direct3D11.RenderTargetViewDescription
+            {
+                Format = texture.Description.Format,
+                ViewDimension = Vortice.Direct3D11.RenderTargetViewDimension.Texture2D,
+                Texture2D = new Vortice.Direct3D11.Texture2DRenderTargetView
+                {
+                    MipSlice = 0
+                }
+            };
+            // 创建并返回RenderTargetView
+            return Device.CreateRenderTargetView(texture, rtvDesc);
+        }
+
+        public static void TextureUnlockRectangle(Vortice.Direct3D11.ID3D11Resource Texture, uint source)
+        {
+            DeviceContext.Unmap(Texture, source);
+        }
+
+        public static Vortice.Direct3D11.MappedSubresource TextureLockRectangle_0Discard(Vortice.Direct3D11.ID3D11Resource Texture)
+        {
+            return DeviceContext.Map(Texture, 0, Vortice.Direct3D11.MapMode.WriteDiscard, Vortice.Direct3D11.MapFlags.None);
+        }
+
+        /// <summary>
+        /// ControlTexture、FloorTexture、LightTexture使用RenderTarget创建
+        /// </summary>
+        /// <param name="width"></param>
+        /// <param name="height"></param>
+        /// <returns></returns>
+        public static Vortice.Direct3D11.ID3D11Texture2D NewTexture_RenderTarget_Default(uint width, uint height)
+        {
+            try
+            {
+                //ControlTexture = new Texture(DXManager.Device, Size.Width, Size.Height, 1, Usage.RenderTarget, Format.A8R8G8B8, Pool.Default);
+                // 创建Direct3D11兼容的渲染目标纹理
+                var textureDesc = new Vortice.Direct3D11.Texture2DDescription
+                {
+                    Width = width,
+                    Height = height,
+                    MipLevels = 1,
+                    ArraySize = 1,
+                    Format = Vortice.DXGI.Format.B8G8R8A8_UNorm, // 对应A8R8G8B8格式
+                    SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
+                    Usage = Vortice.Direct3D11.ResourceUsage.Default, // Pool.Default等效参数
+                    BindFlags = Vortice.Direct3D11.BindFlags.RenderTarget, // Usage.RenderTarget映射
+                    CPUAccessFlags = Vortice.Direct3D11.CpuAccessFlags.None,// Default资源通常不需要CPU访问
+                    MiscFlags = Vortice.Direct3D11.ResourceOptionFlags.None, //MiscFlags.Shared?
+                };
+                var texture = Device.CreateTexture2D(textureDesc);
+                return texture;
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+
+        public static Vortice.Direct3D11.ID3D11Texture2D CreateTexture_DepthStencil(uint width, uint height)
+        {
+            try
+            {
+                var textureDesc = new Vortice.Direct3D11.Texture2DDescription
+                {
+                    Width = width,
+                    Height = height,
+                    MipLevels = 1,
+                    ArraySize = 1,
+                    Format = Vortice.DXGI.Format.D24_UNorm_S8_UInt‌, // 对应A8R8G8B8格式
+                    SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
+                    Usage = Vortice.Direct3D11.ResourceUsage.Default, // Pool.Default等效参数
+                    BindFlags = Vortice.Direct3D11.BindFlags.DepthStencil, // Usage.RenderTarget映射
+                    CPUAccessFlags = Vortice.Direct3D11.CpuAccessFlags.None,// Default资源通常不需要CPU访问
+                    MiscFlags = Vortice.Direct3D11.ResourceOptionFlags.None, //MiscFlags.Shared?
+                };
+                var texture = Device.CreateTexture2D(textureDesc);
+                return texture;
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+
+
+        public static Vortice.Direct3D11.ID3D11Texture2D NewTexture_None_Managed(uint width, uint height)
+        {
+            try
+            {
+                // 创建Direct3D11兼容的托管纹理
+                var textureDesc = new Vortice.Direct3D11.Texture2DDescription
+                {
+                    Width = width,
+                    Height = height,
+                    MipLevels = 1,
+                    ArraySize = 1,
+                    Format = Vortice.DXGI.Format.B8G8R8A8_UNorm, // 对应A8R8G8B8格式
+                    SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
+                    Usage = Vortice.Direct3D11.ResourceUsage.Dynamic, // Pool.Managed等效配置
+                    BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource, // Usage.None默认绑定，需配合CreateShaderResourceView创建视图绑定到管线
+                    CPUAccessFlags = Vortice.Direct3D11.CpuAccessFlags.Write, // 支持CPU写入
+                    MiscFlags = Vortice.Direct3D11.ResourceOptionFlags.None, //MiscFlags.Shared?
+
+                };
+                var texture = Device.CreateTexture2D(textureDesc);
+                return texture;
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+
+
+        public static Vortice.Mathematics.Color4 ToColor4_Vortice(System.Drawing.Color color)
+        {
+            return new Vortice.Mathematics.Color4(
+                color.R / 255f,
+                color.G / 255f,
+                color.B / 255f,
+                color.A / 255f
+            );
+        }
+
+
+        /// <summary>
+        /// 成对使用
+        /// </summary>
+        /// <returns></returns>
+        public static MemoryStream SurfaceToStream_Start(Vortice.Direct3D11.ID3D11Texture2D texture)
+        {
+            var mapped = DeviceContext.Map(texture, 0, Vortice.Direct3D11.MapMode.Read, Vortice.Direct3D11.MapFlags.None);
+            var totalSize = mapped.RowPitch * texture.Description.Height;//二维纹理长度计算
+            byte[] data = new byte[totalSize];
+            Marshal.Copy(mapped.DataPointer, data, 0, (int)totalSize);
+            var stream = new MemoryStream();
+            stream.Write(data, 0, data.Length);
+            stream.Position = 0;
+            return stream;
+        }
+
+        /// <summary>
+        /// 成对使用，释放资源
+        /// </summary>
+        public static void SurfaceToStream_End(Vortice.Direct3D11.ID3D11Texture2D texture, MemoryStream stream)
+        {
+            stream.Close();
+            stream.Dispose();
+            stream = null;
+            DeviceContext.Unmap(texture, 0);
+        }
+
+        /// <summary>
+        /// 什么都不做
+        /// Device.BeginScene()
+        /// </summary>
+        public static void DeviceBeginScene()
+        {
+        }
+
+        /// <summary>
+        /// 什么都不做
+        /// Device.EndScene()
+        /// </summary>
+        public static void DeviceEndScene()
+        {
+        }
+
+        /// <summary>
+        /// Device.Present()
+        /// </summary>
+        public static void DevicePresent()
+        {
+            DXGISwapChain.Present(1, Vortice.DXGI.PresentFlags.None); // 垂直同步间隔为1
+        }
+
+        /// <summary>
+        /// Device.Clear(Color.Black)
+        /// 清屏为黑色
+        /// </summary>
+        public static void DeviceClear_Target(System.Drawing.Color color)
+        {
+            DeviceContext.ClearRenderTargetView(CurrentSurface, ToColor4_Vortice(color));
+        }
+
+        /// <summary>
+        /// Sprite.Flush()
+        /// 一般不用主动调用，会自动同步，主动调用时是因为需要强制同步
+        /// </summary>
+        public static void Sprite_Flush()
+        {
+            DXGISwapChain.Present(1, PresentFlags.None);
+            DeviceContext.Flush();
+        }
+
+        /// <summary>
+        /// Sprite.End()
+        /// </summary>
+        public static void Sprite_End()
+        {
+            Sprite.EndDraw();
+        }
+
+        /// <summary>
+        /// Device.SetRenderState(AlphaBlendEnable)
+        /// </summary>
+        /// <param name="flag"></param>
+        public static void DeviceSetRenderState_AlphaBlendEnable(bool flag)
+        {
+            var ee = new Vortice.Direct3D11.RenderTargetBlendDescription
+            {
+                BlendEnable = flag,  // 对应D3DRS_ALPHABLENDENABLE
+                SourceBlend = Vortice.Direct3D11.Blend.SourceAlpha,
+                DestinationBlend = Vortice.Direct3D11.Blend.InverseSourceAlpha,
+                BlendOperation = Vortice.Direct3D11.BlendOperation.Add
+            };
+            Device.ImmediateContext.OMSetBlendState(Device.CreateBlendState(new Vortice.Direct3D11.BlendDescription     //CreateBlendState参数错误
+            {
+                RenderTarget = new Vortice.Direct3D11.BlendDescription.RenderTarget__FixedBuffer()
+                {
+                    e0 = ee,
+                    e1 = ee,
+                    e2 = ee,
+                    e3 = ee,
+                    e4 = ee,
+                    e5 = ee,
+                    e6 = ee,
+                    e7 = ee,
+                }
+            }));
+        }
+
+        /// <summary>
+        /// Sprite.Begin(DoNotSaveState)
+        /// </summary>
+        public static void SpriteBegin_DoNotSaveState()
+        {
+            DeviceContext.OMSetBlendState(null); // 使用默认混合状态
+            DeviceContext.OMSetDepthStencilState(null); // 禁用深度测试
+            DeviceContext.RSSetState(null); // 使用默认光栅化状态
+
+            Sprite.BeginDraw();
+        }
+
+        /// <summary>
+        /// Sprite.Begin(AlphaBlend)
+        /// </summary>
+        public static void SpriteBegin_AlphaBlend()
+        {
+            Device.ImmediateContext.OMSetBlendState(Device.CreateBlendState(new Vortice.Direct3D11.BlendDescription
+            {
+                RenderTarget = new Vortice.Direct3D11.BlendDescription.RenderTarget__FixedBuffer()
+                {
+                    e0 = new Vortice.Direct3D11.RenderTargetBlendDescription
+                    {
+                        BlendEnable = true,
+                        SourceBlend = Vortice.Direct3D11.Blend.SourceAlpha,
+                        DestinationBlend = Vortice.Direct3D11.Blend.InverseSourceAlpha,
+                        BlendOperation = Vortice.Direct3D11.BlendOperation.Add,
+                        SourceBlendAlpha = Vortice.Direct3D11.Blend.One,
+                        DestinationBlendAlpha = Vortice.Direct3D11.Blend.Zero,
+                        BlendOperationAlpha = Vortice.Direct3D11.BlendOperation.Add,
+                        RenderTargetWriteMask = Vortice.Direct3D11.ColorWriteEnable.All
+                    }
+                }
+            }));
+
+            Sprite.BeginDraw();
+        }
+
+        public static Matrix4x4 MatrixScaling0(float scaleX, float scaleY)
+        {
+            //创建缩放矩阵（Z轴缩放值设为1.0f，与SlimDX的0等效）
+            return Matrix4x4.CreateScale(scaleX, scaleY, 1.0f);
+        }
+
+        public static void SpriteTransform(Matrix4x4 matrix)
+        {
+            var bufferDesc = new BufferDescription
+            {
+                Usage = ResourceUsage.Dynamic,
+                BindFlags = BindFlags.ConstantBuffer,
+                ByteWidth = (uint)Marshal.SizeOf<Matrix4x4>(),
+                CPUAccessFlags = CpuAccessFlags.Write
+            };
+            var constantBuffer = Device.CreateBuffer(bufferDesc);
+            var dataStream = DeviceContext.Map(constantBuffer, MapMode.WriteDiscard);
+            unsafe
+            {
+                var matrixPtr = (Matrix4x4*)dataStream.DataPointer;// 等效于SlimDX.Sprite.Transform = matrix
+                *matrixPtr = matrix; //创建缩放矩阵（Z轴缩放值设为1.0f，与SlimDX的0等效）
+            }
+            DeviceContext.Unmap(constantBuffer);
+            DeviceContext.VSSetConstantBuffer(0, constantBuffer);
+        }
+
+        #endregion
+
+        #region lyo，常量缓冲区设置
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct MatrixBuffer
+        {
+            public Vector4 param1;
+            public Vector4 param2;
+        }
+
+        private static void MakePSSetConstantBuffer(float blend, System.Drawing.Color tintcolor)
+        {
+            var buffer = new Vortice.Direct3D11.BufferDescription
+            {
+                ByteWidth = (uint)Marshal.SizeOf<MatrixBuffer>(),
+                BindFlags = Vortice.Direct3D11.BindFlags.VertexBuffer,
+                MiscFlags = Vortice.Direct3D11.ResourceOptionFlags.None,
+                StructureByteStride = 0,
+                CPUAccessFlags = Vortice.Direct3D11.CpuAccessFlags.Write | Vortice.Direct3D11.CpuAccessFlags.Read,
+                Usage = Vortice.Direct3D11.ResourceUsage.Dynamic,
+            };
+            var constantBuffer = Device.CreateBuffer(buffer);
+            var matrixData = new MatrixBuffer
+            {
+                param1 = new Vector4(1.0F, 1.0F, 1.0F, blend),
+                param2 = new Vector4(tintcolor.R / 255, tintcolor.G / 255, tintcolor.B / 255, 1.0F)
+            };
+            DeviceContext.UpdateSubresource(in matrixData, constantBuffer);
+            DeviceContext.PSSetConstantBuffer(0, constantBuffer);
+            DeviceContext.PSSetConstantBuffer(1, constantBuffer);
+            DeviceContext.IASetVertexBuffer(0, constantBuffer, 0);//add
+        }
+
+        public static void SetNormal(float blend, System.Drawing.Color tintcolor)
+        {
+            if (DeviceContext.PSGetShader() == NormalPixelShader)
+            {
+                return;
+            }
+            Sprite_Flush();
+
+            DeviceContext.PSSetShader(NormalPixelShader, null, 0);
+
+            MakePSSetConstantBuffer(blend, tintcolor);
+
+            Sprite_Flush();
+        }
+
+        public static void SetGrayscale(float blend, System.Drawing.Color tintcolor)
+        {
+            if (DeviceContext.PSGetShader() == GrayScalePixelShader)
+            {
+                return;
+            }
+
+            Sprite_Flush();
+            DeviceContext.PSSetShader(GrayScalePixelShader, null, 0);
+            MakePSSetConstantBuffer(blend, tintcolor);
+            Sprite_Flush();
+        }
+
+        public static void SetBlendMagic(float blend, System.Drawing.Color tintcolor)
+        {
+            if (DeviceContext.PSGetShader() == MagicPixelShader || MagicPixelShader == null)
+            {
+                return;
+            }
+
+            Sprite_Flush();
+            DeviceContext.PSSetShader(MagicPixelShader, null, 0);
+
+            MakePSSetConstantBuffer(blend, tintcolor);
+
+            Sprite_Flush();
+        }
+
+        #endregion
+
+
+        public static void Clean()
+        {
+
+            for (int i = TextureList.Count - 1; i >= 0; i--)
+            {
+                MImage m = TextureList[i];
+
+                if (m == null)
+                {
+                    TextureList.RemoveAt(i);
+                    continue;
+                }
+
+                if (CMain.Time <= m.CleanTime) continue;
+
+                m.DisposeTexture();
+            }
+
+            for (int i = ControlList.Count - 1; i >= 0; i--)
+            {
+                MirControl c = ControlList[i];
+
+                if (c == null)
+                {
+                    ControlList.RemoveAt(i);
+                    continue;
+                }
+
+                if (CMain.Time <= c.CleanTime) continue;
+
+                c.DisposeTexture();
+            }
+        }
+
+
+        private static void CleanUp()
+        {
+
+            if (Sprite != null)
+            {
+                Sprite.Dispose();
+                Sprite = null;
+            }
+
+            if (CurrentSurface != null)
+            {
+                CurrentSurface.Dispose();
+                CurrentSurface = null;
+            }
+
+            if (PoisonDotBackground != null)
+            {
+                PoisonDotBackground.Dispose();
+                PoisonDotBackground = null; // 防止C# GC过早回收资源
+            }
+
+            if (RadarTexture != null)
+            {
+                RadarTexture.Dispose();
+                RadarTexture = null; // 防止C# GC过早回收资源
+            }
+
+            if (FloorTexture != null)
+            {
+                FloorTexture.Dispose();
+                FloorTexture = null; // 防止C# GC过早回收资源
+                GameScene.Scene.MapControl.FloorValid = false;
+
+                if (FloorSurface != null)
+                {
+                    FloorSurface.Dispose();
+                }
+
+                FloorSurface = null;
+            }
+
+            if (LightTexture != null)
+            {
+                LightTexture.Dispose();
+                LightTexture = null; // 防止C# GC过早回收资源
+
+                if (LightSurface != null)
+                {
+                    LightSurface.Dispose();
+                }
+
+                LightSurface = null;
+            }
+
+            if (Lights != null)
+            {
+                for (int i = 0; i < Lights.Count; i++)
+                {
+                    Lights[i].Dispose();
+                    Lights[i] = null; // 防止C# GC过早回收资源
+                }
+                Lights.Clear();
+            }
+
+            for (int i = TextureList.Count - 1; i >= 0; i--)
+            {
+                MImage m = TextureList[i];
+
+                if (m == null) continue;
+
+                m.DisposeTexture();
+            }
+            TextureList.Clear();
+
+
+            for (int i = ControlList.Count - 1; i >= 0; i--)
+            {
+                MirControl c = ControlList[i];
+
+                if (c == null) continue;
+
+                c.DisposeTexture();
+            }
+            ControlList.Clear();
+        }
+
+        public static void Dispose()
+        {
+            CleanUp();
+
+            Device?.ImmediateContext?.Dispose();
+            Device?.Dispose();
+            DeviceContext = null;
+            Device = null;
+
+            NormalPixelShader?.Dispose();
+            GrayScalePixelShader?.Dispose();
+            MagicPixelShader?.Dispose();
+        }
+
+        private static IEnumerable<Vortice.DXGI.IDXGIAdapter1> GetHardwareAdapter(Vortice.DXGI.IDXGIFactory2 factory)
+        {
+            Vortice.DXGI.IDXGIFactory6? factory6 = factory.QueryInterfaceOrNull<Vortice.DXGI.IDXGIFactory6>();
+            if (factory6 != null)
+            {
+                for (int adapterIndex = 0;
+                     factory6.EnumAdapterByGpuPreference((uint)adapterIndex, Vortice.DXGI.GpuPreference.HighPerformance,
+                         out Vortice.DXGI.IDXGIAdapter1? adapter).Success;
+                     adapterIndex++)
+                {
+                    if (adapter == null)
+                    {
+                        continue;
+                    }
+                    Vortice.DXGI.AdapterDescription1 desc = adapter.Description1;
+                    if ((desc.Flags & Vortice.DXGI.AdapterFlags.Software) != Vortice.DXGI.AdapterFlags.None)
+                    {
+                        adapter.Dispose();
+                        continue;
+                    }
+                    yield return adapter;
+                }
+                factory6.Dispose();
+            }
+            for (int adapterIndex = 0;
+                 factory.EnumAdapters1((uint)adapterIndex, out Vortice.DXGI.IDXGIAdapter1? adapter).Success;
+                 adapterIndex++)
+            {
+                Vortice.DXGI.AdapterDescription1 desc = adapter.Description1;
+
+                if ((desc.Flags & Vortice.DXGI.AdapterFlags.Software) != Vortice.DXGI.AdapterFlags.None)
+                {
+                    adapter.Dispose();
+
+                    continue;
+                }
+                yield return adapter;
+            }
+        }
+
+        public static byte[] GetBitmapPixelData(System.Drawing.Bitmap bitmap)
+        {
+            Rectangle rect = new Rectangle(0, 0, bitmap.Width, bitmap.Height);
+            BitmapData bmpData = bitmap.LockBits(rect, ImageLockMode.ReadOnly, bitmap.PixelFormat);
+            try
+            {
+                int bytes = Math.Abs(bmpData.Stride) * bitmap.Height;
+                byte[] rgbValues = new byte[bytes];
+                Marshal.Copy(bmpData.Scan0, rgbValues, 0, bytes);
+                return rgbValues;
+            }
+            finally
+            {
+                bitmap.UnlockBits(bmpData);
+            }
+        }
+    }
+
+    public static class Direct2DTextureRenderer
+    {
+        public static void DrawTexture(
+            ID2D1RenderTarget renderTarget,
+            ID2D1Bitmap bitmap,
+            Rectangle? sourceRect,
+            System.Numerics.Vector3? position,
+            Vortice.Mathematics.Color4 color)
+        {
+            // 获取DPI缩放比例
+            float dpiX = renderTarget.Dpi.Width;
+            float dpiY = renderTarget.Dpi.Height;
+
+            // 计算目标矩形
+            var destRect = CalculateDestinationRect(
+                bitmap.PixelSize,
+                sourceRect,
+                position,
+                dpiX, dpiY);
+
+            // 转换源矩形
+            RawRectF? sourceRectF = sourceRect.HasValue
+                ? new RawRectF(
+                    sourceRect.Value.Left,
+                    sourceRect.Value.Top,
+                    sourceRect.Value.Right,
+                    sourceRect.Value.Bottom)
+                : null;
+
+            // 计算透明度
+            float opacity = (color.R + color.G + color.B) / 3.0f * color.A;
+
+            // 执行绘制
+            renderTarget.DrawBitmap(
+                bitmap,
+                destRect,
+                opacity,
+                Vortice.Direct2D1.BitmapInterpolationMode.Linear,
+                sourceRectF);
+        }
+
+        private static RawRectF CalculateDestinationRect(
+            Vortice.Mathematics.SizeI textureSize,
+            Rectangle? sourceRect,
+            System.Numerics.Vector3? position,
+            float dpiX, float dpiY)
+        {
+            // 计算实际使用的纹理区域
+            int width = sourceRect.HasValue ? sourceRect.Value.Width : textureSize.Width;
+            int height = sourceRect.HasValue ? sourceRect.Value.Height : textureSize.Height;
+
+            // 转换为DIPs(设备无关像素)
+            float dipWidth = width * (96.0f / dpiX);
+            float dipHeight = height * (96.0f / dpiY);
+
+            // 应用位置偏移
+            float left = position.HasValue ? position.Value.X : 0;
+            float top = position.HasValue ? position.Value.Y : 0;
+
+            return new RawRectF(
+                left,
+                top,
+                left + dipWidth,
+                top + dipHeight);
+        }
+    }
+
+    public class Direct2DText : IDisposable
+    {
+        private readonly Vortice.Direct2D1.ID2D1RenderTarget _renderTarget;
+        private readonly Vortice.Direct2D1.ID2D1SolidColorBrush _textBrush;
+
+        public Direct2DText(ID2D1RenderTarget renderTarget)
+        {
+            _renderTarget = renderTarget;
+            _textBrush = _renderTarget.CreateSolidColorBrush(new Vortice.Mathematics.Color4(1.0f, 1.0f, 1.0f, 1.0f));
+        }
+
+        public void Dispose()
+        {
+            _renderTarget.Dispose();
+            _textBrush.Dispose();
+        }
+
+        public void DrawTextToTexture(ID2D1Bitmap textureBitmap, string text, System.Drawing.Font font,
+            System.Drawing.Color foreColor, System.Drawing.Color backColor, System.Drawing.Size size, DrawTextOptions drawOptions,
+            int outLine, System.Drawing.Color borderColor)
+        {
+            foreColor = System.Drawing.Color.White;
+            backColor = System.Drawing.Color.White;
+            borderColor = System.Drawing.Color.White;
+
+            // 开始绘制
+            //_renderTarget.BeginDraw();
+
+            //背景色
+            _renderTarget.Clear(new Vortice.Mathematics.Color4(
+                backColor.R / 255f,
+                backColor.G / 255f,
+                backColor.B / 255f,
+                backColor.A / 255f
+            ));
+            // 设置文本颜色
+            _textBrush.Color = new Vortice.Mathematics.Color4(
+                foreColor.R / 255.0f,
+                foreColor.G / 255.0f,
+                foreColor.B / 255.0f,
+                foreColor.A / 255.0f);
+            // 设置边框颜色
+            var _borderColor = new Vortice.Mathematics.Color4(
+                borderColor.R / 255.0f,
+                borderColor.G / 255.0f,
+                borderColor.B / 255.0f,
+                borderColor.A / 255.0f);
+
+            // 创建D2D文本格式
+            using (var textFormat = DXManager.DwFactory.CreateTextFormat(
+                font.FontFamily.Name,
+                font.Bold ? FontWeight.Bold : FontWeight.Normal,
+                font.Italic ? Vortice.DirectWrite.FontStyle.Italic : Vortice.DirectWrite.FontStyle.Normal,
+                font.Size))
+            {
+                textFormat.TextAlignment = TextAlignment.Leading;
+                textFormat.ParagraphAlignment = ParagraphAlignment.Near;
+
+                //画边框
+                // 计算文本边界（需配合DirectWrite测量）
+                using var borderBrush = _renderTarget.CreateSolidColorBrush(_borderColor);
+                var textLayout = DXManager.DwFactory.CreateTextLayout(text, textFormat, textureBitmap.Size.Width, textureBitmap.Size.Height);
+                var metrics = textLayout.Metrics;
+                switch (outLine)
+                {
+                    case 0://无边框
+                        break;
+                    case 1://普通边框
+                        // 扩展边界作为边框区域
+                        var borderRect = new Vortice.Mathematics.Rect(
+                            0 - 2,    // 左边距
+                            0 - 2,     // 上边距
+                            0 + metrics.Width + 4,  // 右边界
+                            0 + metrics.Height + 4   // 下边界
+                        );
+                        _renderTarget.DrawRectangle(borderRect, borderBrush, 1.5f);
+                        break;
+                    case 2://圆角矩形边框
+                        //// 绘制圆角矩形边框
+                        //_renderTarget.DrawRoundedRectangle(
+                        //    new RoundedRectangle(borderRect, 3, 3),  // 圆角半径
+                        //    _textBrush,
+                        //    2.0f  // 边框粗细
+                        //);
+                        break;
+                    case 3://虚线边框
+                        //// 虚线边框
+                        //var strokeStyle = _renderTarget.Factory.CreateStrokeStyle(new StrokeStyleProperties
+                        //{
+                        //    DashStyle = DashStyle.Dash
+                        //});
+                        //_renderTarget.DrawRectangle(borderRect, borderBrush, 1.5f, strokeStyle);
+                        break;
+                    case 4://渐变边框
+                        //// 渐变边框
+                        //using var gradientBrush = _renderTarget.CreateLinearGradientBrush(/* 渐变参数 */);
+                        //_renderTarget.DrawRectangle(borderRect, gradientBrush, 3.0f);
+                        break;
+                    default:
+                        break;
+                }
+
+                // 绘制文本
+                _renderTarget.DrawText(text, textFormat, new RawRectF(1, 0, size.Width, size.Height), _textBrush, drawOptions);
+            }
+            // 结束绘制
+            //_renderTarget.EndDraw();
+        }
+
+        public ID2D1Bitmap CreateTextureBitmap(System.Drawing.Size size)
+        {
+            // 创建WIC位图
+            using (var wicBitmap = DXManager.WicFactory.CreateBitmap((uint)size.Width, (uint)size.Height,
+                Vortice.WIC.PixelFormat.Format32bppPBGRA, BitmapCreateCacheOption.CacheOnLoad))
+            {
+                // 从WIC位图创建D2D位图
+                return _renderTarget.CreateBitmapFromWicBitmap(wicBitmap);
+            }
+        }
+    }
+
+    public static class GrabImage
+    {
+        public static void ShowImageFromGPU(ID3D11Device device, ID3D11Texture2D texture)
+        {
+            // 获取纹理描述
+            var desc = texture.Description;
+
+            // 创建临时纹理用于CPU读取
+            var stagingDesc = desc with
+            {
+                Usage = ResourceUsage.Staging,
+                BindFlags = BindFlags.None,
+                CPUAccessFlags = CpuAccessFlags.Read
+                //Usage = Vortice.Direct3D11.ResourceUsage.Dynamic,
+                //BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource,
+                //CPUAccessFlags = Vortice.Direct3D11.CpuAccessFlags.Write,
+            };
+
+            using var stagingTexture = device.CreateTexture2D(stagingDesc);
+
+            // 复制GPU纹理到CPU可读纹理
+            device.ImmediateContext.CopyResource(stagingTexture, texture);
+
+            // 映射纹理数据
+            var map = device.ImmediateContext.Map(stagingTexture, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None);
+            //var map = device.ImmediateContext.Map(stagingTexture, 0, MapMode.WriteDiscard, Vortice.Direct3D11.MapFlags.None);
+            try
+            {
+                // 创建Bitmap并复制数据
+                var bitmap = new Bitmap((int)desc.Width, (int)desc.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                var bitmapData = bitmap.LockBits(
+                    new Rectangle(0, 0, bitmap.Width, bitmap.Height),
+                    ImageLockMode.WriteOnly,
+                    bitmap.PixelFormat);
+
+                // 逐行复制数据（处理可能的行间距差异）
+                for (int y = 0; y < desc.Height; y++)
+                {
+                    unsafe
+                    {
+                        var srcPtr = (byte*)map.DataPointer + y * map.RowPitch;
+                        var dstPtr = (byte*)bitmapData.Scan0 + y * bitmapData.Stride;
+                        Buffer.MemoryCopy(srcPtr, dstPtr, bitmapData.Stride, desc.Width * 4);
+                    }
+                }
+
+                bitmap.UnlockBits(bitmapData);
+                //return bitmap;
+
+                var form = new Form();
+                form.Text = "GPU图像";
+                form.Size = new System.Drawing.Size(bitmap.Width == 0 ? 300 : bitmap.Width, bitmap.Height == 0 ? 200 : bitmap.Height);
+                var pictureBox = new PictureBox();
+                pictureBox.Dock = DockStyle.Fill;
+                pictureBox.SizeMode = PictureBoxSizeMode.Zoom;
+                pictureBox.Image = bitmap;
+                form.Controls.Add(pictureBox);
+                form.Show();
+            }
+            finally
+            {
+                device.ImmediateContext.Unmap(stagingTexture, 0);
+            }
+        }
+
+        public static void ShowImageFromCPU(byte[] rgbaData, int width, int height)
+        {
+            var pixelFormat = System.Drawing.Imaging.PixelFormat.Format32bppRgb;
+            Bitmap bitmap = new Bitmap(width, height, pixelFormat);
+
+            BitmapData bitmapData = bitmap.LockBits(
+                new System.Drawing.Rectangle(0, 0, bitmap.Width, bitmap.Height),
+                ImageLockMode.WriteOnly,
+                pixelFormat);
+
+            IntPtr intPtr = bitmapData.Scan0;
+            System.Runtime.InteropServices.Marshal.Copy(rgbaData, 0, intPtr, rgbaData.Length);
+            bitmap.UnlockBits(bitmapData);
+
+            //return bitmap;
+
+            var form = new Form();
+            form.Text = "CPU图像";
+            form.Size = new System.Drawing.Size(bitmap.Width == 0 ? 300 : bitmap.Width, bitmap.Height == 0 ? 200 : bitmap.Height);
+            var pictureBox = new PictureBox();
+            pictureBox.Dock = DockStyle.Fill;
+            pictureBox.SizeMode = PictureBoxSizeMode.Zoom;
+            pictureBox.Image = bitmap;
+            form.Controls.Add(pictureBox);
+            form.Show();
+        }
+    }
+
+    public class TextureManager
+    {
+        private readonly ID3D11Device device;
+
+        public TextureManager(ID3D11Device device)
+        {
+            this.device = device;
+        }
+
+        public ID3D11Texture2D? LoadTexture(string fileName, int width = 0, int height = 0)
+        {
+            string assetsPath = Path.Combine(AppContext.BaseDirectory, "Textures");
+            string textureFile = Path.Combine(assetsPath, fileName);
+
+            using var wicFactory = new IWICImagingFactory();
+            using IWICBitmapDecoder decoder = wicFactory.CreateDecoderFromFileName(textureFile);
+            using IWICBitmapFrameDecode frame = decoder.GetFrame(0);
+
+            var size = frame.Size;
+
+            // Determine format
+            Guid pixelFormat = frame.PixelFormat;
+            Guid convertGuid = pixelFormat;
+
+            Format format = Vortice.WIC.PixelFormat.ToDXGIFormat(pixelFormat);
+            int bpp = 0;
+            if (format == Format.Unknown)
+            {
+                if (pixelFormat == Vortice.WIC.PixelFormat.Format96bppRGBFixedPoint)
+                {
+                    convertGuid = Vortice.WIC.PixelFormat.Format96bppRGBFixedPoint;
+                    format = Format.R32G32B32_Float;
+                    bpp = 96;
+                }
+                else
+                {
+                    foreach (KeyValuePair<Guid, Guid> item in SWicConvert)
+                    {
+                        if (item.Key == pixelFormat)
+                        {
+                            convertGuid = item.Value;
+
+                            format = Vortice.WIC.PixelFormat.ToDXGIFormat(item.Value);
+                            Debug.Assert(format != Format.Unknown);
+                            bpp = (int)Vortice.WIC.PixelFormat.WICBitsPerPixel(wicFactory, convertGuid);
+                            break;
+                        }
+                    }
+                }
+
+                if (format == Format.Unknown)
+                {
+                    throw new InvalidOperationException("WICTextureLoader does not support all DXGI formats");
+                }
+            }
+            else
+            {
+                // Convert BGRA8UNorm to RGBA8Norm
+                if (pixelFormat == Vortice.WIC.PixelFormat.Format32bppBGRA)
+                {
+                    format = Vortice.WIC.PixelFormat.ToDXGIFormat(Vortice.WIC.PixelFormat.Format32bppRGBA);
+                    convertGuid = Vortice.WIC.PixelFormat.Format32bppRGBA;
+                }
+
+                bpp = (int)Vortice.WIC.PixelFormat.WICBitsPerPixel(wicFactory, pixelFormat);
+            }
+
+            if (format == Format.R32G32B32_Float)
+            {
+                // Special case test for optional device support for autogen mipchains for R32G32B32_FLOAT
+                FormatSupport fmtSupport = device.CheckFormatSupport(Format.R32G32B32_Float);
+                if (!fmtSupport.HasFlag(FormatSupport.MipAutogen))
+                {
+                    // Use R32G32B32A32_FLOAT instead which is required for Feature Level 10.0 and up
+                    convertGuid = Vortice.WIC.PixelFormat.Format128bppRGBAFloat;
+                    format = Format.R32G32B32A32_Float;
+                    bpp = 128;
+                }
+            }
+
+            // Verify our target format is supported by the current device
+            // (handles WDDM 1.0 or WDDM 1.1 device driver cases as well as DirectX 11.0 Runtime without 16bpp format support)
+            FormatSupport support = device.CheckFormatSupport(format);
+            if (!support.HasFlag(FormatSupport.Texture2D))
+            {
+                // Fallback to RGBA 32-bit format which is supported by all devices
+                convertGuid = Vortice.WIC.PixelFormat.Format32bppRGBA;
+                format = Format.R8G8B8A8_UNorm;
+                bpp = 32;
+            }
+
+            int rowPitch = (size.Width * bpp + 7) / 8;
+            int sizeInBytes = rowPitch * size.Height;
+
+            byte[] pixels = new byte[sizeInBytes];
+
+            if (width == 0)
+            {
+                width = size.Width;
+            }
+
+            if (height == 0)
+            {
+                height = size.Height;
+            }
+
+            // Load image data
+            if (convertGuid == pixelFormat && size.Width == width && size.Height == height)
+            {
+                // No format conversion or resize needed
+                frame.CopyPixels((uint)rowPitch, pixels);
+            }
+            else if (size.Width != width || size.Height != height)
+            {
+                // Resize
+                using IWICBitmapScaler scaler = wicFactory.CreateBitmapScaler();
+                scaler.Initialize(frame, (uint)width, (uint)height, Vortice.WIC.BitmapInterpolationMode.Fant);
+
+                Guid pixelFormatScaler = scaler.PixelFormat;
+
+                if (convertGuid == pixelFormatScaler)
+                {
+                    // No format conversion needed
+                    scaler.CopyPixels((uint)rowPitch, pixels);
+                }
+                else
+                {
+                    using IWICFormatConverter converter = wicFactory.CreateFormatConverter();
+
+                    bool canConvert = converter.CanConvert(pixelFormatScaler, convertGuid);
+                    if (!canConvert)
+                    {
+                        return null;
+                    }
+
+                    converter.Initialize(scaler, convertGuid, BitmapDitherType.ErrorDiffusion, null, 0, BitmapPaletteType.MedianCut);
+                    converter.CopyPixels((uint)rowPitch, pixels);
+                }
+            }
+            else
+            {
+                // Format conversion but no resize
+                using IWICFormatConverter converter = wicFactory.CreateFormatConverter();
+
+                bool canConvert = converter.CanConvert(pixelFormat, convertGuid);
+                if (!canConvert)
+                {
+                    return null;
+                }
+
+                converter.Initialize(frame, convertGuid, BitmapDitherType.ErrorDiffusion, null, 0, BitmapPaletteType.MedianCut);
+                converter.CopyPixels((uint)rowPitch, pixels);
+            }
+
+            return device.CreateTexture2D(pixels, format, (uint)size.Width, (uint)size.Height);
+        }
+
+        private static readonly Dictionary<Guid, Guid> SWicConvert = new()
+    {
+        // Note target GUID in this conversion table must be one of those directly supported formats (above).
+
+        { Vortice.WIC.PixelFormat.FormatBlackWhite,            Vortice.WIC.PixelFormat.Format8bppGray }, // DXGI_FORMAT_R8_UNORM
+
+        { Vortice.WIC.PixelFormat.Format1bppIndexed,           Vortice.WIC.PixelFormat.Format32bppRGBA }, // DXGI_FORMAT_R8G8B8A8_UNORM
+        { Vortice.WIC.PixelFormat.Format2bppIndexed,           Vortice.WIC.PixelFormat.Format32bppRGBA }, // DXGI_FORMAT_R8G8B8A8_UNORM
+        { Vortice.WIC.PixelFormat.Format4bppIndexed,           Vortice.WIC.PixelFormat.Format32bppRGBA }, // DXGI_FORMAT_R8G8B8A8_UNORM
+        { Vortice.WIC.PixelFormat.Format8bppIndexed,           Vortice.WIC.PixelFormat.Format32bppRGBA }, // DXGI_FORMAT_R8G8B8A8_UNORM
+
+        { Vortice.WIC.PixelFormat.Format2bppGray,              Vortice.WIC.PixelFormat.Format8bppGray }, // DXGI_FORMAT_R8_UNORM
+        { Vortice.WIC.PixelFormat.Format4bppGray,              Vortice.WIC.PixelFormat.Format8bppGray }, // DXGI_FORMAT_R8_UNORM
+
+        { Vortice.WIC.PixelFormat.Format16bppGrayFixedPoint,   Vortice.WIC.PixelFormat.Format16bppGrayHalf }, // DXGI_FORMAT_R16_FLOAT
+        { Vortice.WIC.PixelFormat.Format32bppGrayFixedPoint,   Vortice.WIC.PixelFormat.Format32bppGrayFloat }, // DXGI_FORMAT_R32_FLOAT
+
+        { Vortice.WIC.PixelFormat.Format16bppBGR555,           Vortice.WIC.PixelFormat.Format16bppBGRA5551 }, // DXGI_FORMAT_B5G5R5A1_UNORM
+
+        { Vortice.WIC.PixelFormat.Format32bppBGR101010,        Vortice.WIC.PixelFormat.Format32bppRGBA1010102 }, // DXGI_FORMAT_R10G10B10A2_UNORM
+
+        { Vortice.WIC.PixelFormat.Format24bppBGR,              Vortice.WIC.PixelFormat.Format32bppRGBA }, // DXGI_FORMAT_R8G8B8A8_UNORM
+        { Vortice.WIC.PixelFormat.Format24bppRGB,              Vortice.WIC.PixelFormat.Format32bppRGBA }, // DXGI_FORMAT_R8G8B8A8_UNORM
+        { Vortice.WIC.PixelFormat.Format32bppPBGRA,            Vortice.WIC.PixelFormat.Format32bppRGBA }, // DXGI_FORMAT_R8G8B8A8_UNORM
+        { Vortice.WIC.PixelFormat.Format32bppPRGBA,            Vortice.WIC.PixelFormat.Format32bppRGBA }, // DXGI_FORMAT_R8G8B8A8_UNORM
+
+        { Vortice.WIC.PixelFormat.Format48bppRGB,              Vortice.WIC.PixelFormat.Format64bppRGBA }, // DXGI_FORMAT_R16G16B16A16_UNORM
+        { Vortice.WIC.PixelFormat.Format48bppBGR,              Vortice.WIC.PixelFormat.Format64bppRGBA }, // DXGI_FORMAT_R16G16B16A16_UNORM
+        { Vortice.WIC.PixelFormat.Format64bppBGRA,             Vortice.WIC.PixelFormat.Format64bppRGBA }, // DXGI_FORMAT_R16G16B16A16_UNORM
+        { Vortice.WIC.PixelFormat.Format64bppPRGBA,            Vortice.WIC.PixelFormat.Format64bppRGBA }, // DXGI_FORMAT_R16G16B16A16_UNORM
+        { Vortice.WIC.PixelFormat.Format64bppPBGRA,            Vortice.WIC.PixelFormat.Format64bppRGBA }, // DXGI_FORMAT_R16G16B16A16_UNORM
+
+        { Vortice.WIC.PixelFormat.Format48bppRGBFixedPoint,    Vortice.WIC.PixelFormat.Format64bppRGBAHalf }, // DXGI_FORMAT_R16G16B16A16_FLOAT
+        { Vortice.WIC.PixelFormat.Format48bppBGRFixedPoint,    Vortice.WIC.PixelFormat.Format64bppRGBAHalf }, // DXGI_FORMAT_R16G16B16A16_FLOAT
+        { Vortice.WIC.PixelFormat.Format64bppRGBAFixedPoint,   Vortice.WIC.PixelFormat.Format64bppRGBAHalf }, // DXGI_FORMAT_R16G16B16A16_FLOAT
+        { Vortice.WIC.PixelFormat.Format64bppBGRAFixedPoint,   Vortice.WIC.PixelFormat.Format64bppRGBAHalf }, // DXGI_FORMAT_R16G16B16A16_FLOAT
+        { Vortice.WIC.PixelFormat.Format64bppRGBFixedPoint,    Vortice.WIC.PixelFormat.Format64bppRGBAHalf }, // DXGI_FORMAT_R16G16B16A16_FLOAT
+        { Vortice.WIC.PixelFormat.Format64bppRGBHalf,          Vortice.WIC.PixelFormat.Format64bppRGBAHalf }, // DXGI_FORMAT_R16G16B16A16_FLOAT
+        { Vortice.WIC.PixelFormat.Format48bppRGBHalf,          Vortice.WIC.PixelFormat.Format64bppRGBAHalf }, // DXGI_FORMAT_R16G16B16A16_FLOAT
+
+        { Vortice.WIC.PixelFormat.Format128bppPRGBAFloat,      Vortice.WIC.PixelFormat.Format128bppRGBAFloat }, // DXGI_FORMAT_R32G32B32A32_FLOAT
+        { Vortice.WIC.PixelFormat.Format128bppRGBFloat,        Vortice.WIC.PixelFormat.Format128bppRGBAFloat }, // DXGI_FORMAT_R32G32B32A32_FLOAT
+        { Vortice.WIC.PixelFormat.Format128bppRGBAFixedPoint,  Vortice.WIC.PixelFormat.Format128bppRGBAFloat }, // DXGI_FORMAT_R32G32B32A32_FLOAT
+        { Vortice.WIC.PixelFormat.Format128bppRGBFixedPoint,   Vortice.WIC.PixelFormat.Format128bppRGBAFloat }, // DXGI_FORMAT_R32G32B32A32_FLOAT
+        { Vortice.WIC.PixelFormat.Format32bppRGBE,             Vortice.WIC.PixelFormat.Format128bppRGBAFloat }, // DXGI_FORMAT_R32G32B32A32_FLOAT
+
+        { Vortice.WIC.PixelFormat.Format32bppCMYK,             Vortice.WIC.PixelFormat.Format32bppRGBA }, // DXGI_FORMAT_R8G8B8A8_UNORM
+        { Vortice.WIC.PixelFormat.Format64bppCMYK,             Vortice.WIC.PixelFormat.Format64bppRGBA }, // DXGI_FORMAT_R16G16B16A16_UNORM
+        { Vortice.WIC.PixelFormat.Format40bppCMYKAlpha,        Vortice.WIC.PixelFormat.Format32bppRGBA }, // DXGI_FORMAT_R8G8B8A8_UNORM
+        { Vortice.WIC.PixelFormat.Format80bppCMYKAlpha,        Vortice.WIC.PixelFormat.Format64bppRGBA }, // DXGI_FORMAT_R16G16B16A16_UNORM
+
+        { Vortice.WIC.PixelFormat.Format32bppRGB,              Vortice.WIC.PixelFormat.Format32bppRGBA }, // DXGI_FORMAT_R8G8B8A8_UNORM
+        { Vortice.WIC.PixelFormat.Format64bppRGB,              Vortice.WIC.PixelFormat.Format64bppRGBA }, // DXGI_FORMAT_R16G16B16A16_UNORM
+        { Vortice.WIC.PixelFormat.Format64bppPRGBAHalf,        Vortice.WIC.PixelFormat.Format64bppRGBAHalf } // DXGI_FORMAT_R16G16B16A16_FLOAT
+
+        // We don't support n-channel formats
+    };
+    }
+
+    public class DxgiInfoManager
+    {
+        private ulong next;
+        private IDXGIInfoQueue? infoQueue;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="DxgiInfoManager"/> class.
+        /// </summary>
+        public DxgiInfoManager()
+        {
+            if (D3D11.SdkLayersAvailable())
+            {
+                this.infoQueue = DXGI.DXGIGetDebugInterface1<IDXGIInfoQueue>();
+            }
+        }
+
+        /// <inheritdoc/>
+        public void Dispose()
+        {
+            this.infoQueue?.Release();
+        }
+
+        /// <summary>
+        /// Prints the messages from the info queue.
+        /// </summary>
+        /// <returns>Returns a list with messages.</returns>
+        public void PrintMessages()
+        {
+            if (this.infoQueue == null) return;
+
+            var end = this.infoQueue.GetNumStoredMessages(DXGI.DebugAll);
+
+            if ((end > 0) && (this.next < end))
+            {
+                Debug.WriteLine("\n--- BEGIN DXGI INFO MANAGER MESSAGES ---");
+                for (ulong i = this.next; i < end; i++)
+                {
+                    var message = this.infoQueue.GetMessage(DXGI.DebugAll, i);
+                    Debug.WriteLine(message.Description);
+                }
+
+                Debug.WriteLine("--- END DXGI INFO MANAGER MESSAGES ---\n");
+            }
+        }
+
+        /// <summary>
+        /// Sets the point from which new messages are collected.
+        /// </summary>
+        public void Set()
+        {
+            if (this.infoQueue == null) return;
+            this.next = this.infoQueue.GetNumStoredMessages(DXGI.DebugAll);
+        }
+    }
+
+    public class MeshData
+    {
+        public readonly VertexPositionNormalTexture[] Vertices;
+        public readonly VertexPositionColor[] VerticesColor;
+        public readonly ushort[] Indices;
+
+        public MeshData(VertexPositionColor[] vertices)
+        {
+            VerticesColor = vertices;
+            Indices = null;
+        }
+
+        public MeshData(VertexPositionNormalTexture[] vertices, ushort[] indices)
+        {
+            Vertices = vertices;
+            Indices = indices;
+        }
+    }
+
+    public static class MeshUtilities
+    {
+        private const int CubeFaceCount = 6;
+
+        public static MeshData CreateCube(float size)
+        {
+            return MeshUtilities.CreateBox(new Vector3(size));
+        }
+
+        private static MeshData CreateBox(in Vector3 size)
+        {
+            List<VertexPositionNormalTexture> vertices = new List<VertexPositionNormalTexture>();
+            List<ushort> indices = new List<ushort>();
+
+            Vector3[] faceNormals = {
+            Vector3.UnitZ, new Vector3(0.0f, 0.0f, -1.0f),
+            Vector3.UnitX, new Vector3(-1.0f, 0.0f, 0.0f),
+            Vector3.UnitY, new Vector3(0.0f, -1.0f, 0.0f),
+        };
+
+            Vector2[] textureCoordinates = {
+            Vector2.UnitX,
+            Vector2.One,
+            Vector2.UnitY,
+            Vector2.Zero,
+        };
+
+            Vector3 tsize = size / 2.0f;
+
+            // Create each face in turn.
+            int vbase = 0;
+            for (int i = 0; i < MeshUtilities.CubeFaceCount; i++)
+            {
+                Vector3 normal = faceNormals[i];
+
+                // Get two vectors perpendicular both to the face normal and to each other.
+                Vector3 basis = (i >= 4) ? Vector3.UnitZ : Vector3.UnitY;
+
+                Vector3 side1 = Vector3.Cross(normal, basis);
+                Vector3 side2 = Vector3.Cross(normal, side1);
+
+                // Six indices (two triangles) per face.
+                indices.Add((ushort)(vbase + 0));
+                indices.Add((ushort)(vbase + 1));
+                indices.Add((ushort)(vbase + 2));
+
+                indices.Add((ushort)(vbase + 0));
+                indices.Add((ushort)(vbase + 2));
+                indices.Add((ushort)(vbase + 3));
+
+                // Four vertices per face.
+                // (normal - side1 - side2) * tsize // normal // t0
+                vertices.Add(new VertexPositionNormalTexture(
+                    Vector3.Multiply(Vector3.Subtract(Vector3.Subtract(normal, side1), side2), tsize),
+                    normal,
+                    textureCoordinates[0]
+                    ));
+
+                // (normal - side1 + side2) * tsize // normal // t1
+                vertices.Add(new VertexPositionNormalTexture(
+                    Vector3.Multiply(Vector3.Add(Vector3.Subtract(normal, side1), side2), tsize),
+                    normal,
+                    textureCoordinates[1]
+                    ));
+
+                // (normal + side1 + side2) * tsize // normal // t2
+                vertices.Add(new VertexPositionNormalTexture(
+                    Vector3.Multiply(Vector3.Add(normal, Vector3.Add(side1, side2)), tsize),
+                    normal,
+                    textureCoordinates[2]
+                    ));
+
+                // (normal + side1 - side2) * tsize // normal // t3
+                vertices.Add(new VertexPositionNormalTexture(
+                    Vector3.Multiply(Vector3.Subtract(Vector3.Add(normal, side1), side2), tsize),
+                    normal,
+                    textureCoordinates[3]
+                    ));
+
+                vbase += 4;
+            }
+
+            return new MeshData(vertices.ToArray(), indices.ToArray());
+        }
+
+        public static MeshData CreateGrid()
+        {
+            var colorWhite = Colors.White;
+            var offset = 1.0f;
+            var lineVerticesBufferSize = 90;
+            var lineVertices2 = new VertexPositionColor[lineVerticesBufferSize];
+            var lineVertices3 = new VertexPositionColor[lineVerticesBufferSize];
+            for (int i = 0; i < lineVerticesBufferSize; i++)
+            {
+                if ((i % 2) == 0)
+                {
+                    var vertex1 = new VertexPositionColor(new Vector3(-1.0f, offset, 0.0f), colorWhite);
+                    var vertex2 = new VertexPositionColor(new Vector3(offset, -1.0f, 0.0f), colorWhite);
+                    lineVertices2[i] = vertex1;
+                    lineVertices3[i] = vertex2;
+                }
+                else
+                {
+                    var vertex3 = new VertexPositionColor(new Vector3(1.0f, offset, 0.0f), colorWhite);
+                    var vertex4 = new VertexPositionColor(new Vector3(offset, 1.0f, 0.0f), colorWhite);
+                    lineVertices2[i] = vertex3;
+                    lineVertices3[i] = vertex4;
+
+                    offset -= 0.05f;
+                }
+            }
+
+            var temp = lineVertices2.ToList();
+            var temp2 = lineVertices3.ToList();
+            temp.AddRange(temp2);
+
+            return new MeshData(temp.ToArray());
+        }
+
+        public static MeshData CreateSignal()
+        {
+            var colorYellow = Colors.Black;
+            var colorRed = Colors.Yellow;
+            const float ZIndex = 0.0f;
+            ReadOnlySpan<VertexPositionColor> signalVertices = new VertexPositionColor[]
+            {
+            new VertexPositionColor(new Vector3(-1.0f, -0.5f, ZIndex), colorYellow),
+            new VertexPositionColor(new Vector3(-0.75f, -0.2f, ZIndex), colorYellow),
+            new VertexPositionColor(new Vector3(-0.2f, -0.1f, ZIndex), colorYellow),
+            new VertexPositionColor(new Vector3(-0.1f, 0.2f, ZIndex), colorYellow),
+            new VertexPositionColor(new Vector3(0.2f, -0.25f, ZIndex), colorYellow),
+            new VertexPositionColor(new Vector3(0.25f, 0.37f, ZIndex), colorRed),
+            new VertexPositionColor(new Vector3(0.37f, -0.5f, ZIndex), colorRed),
+            new VertexPositionColor(new Vector3(0.5f, -0.6f, ZIndex), colorRed),
+            new VertexPositionColor(new Vector3(0.6f, 0.8f, ZIndex), colorRed),
+            new VertexPositionColor(new Vector3(0.8f, 1.0f, ZIndex), colorRed)
+            };
+
+            return new MeshData(signalVertices.ToArray());
+        }
+    }
+
+    public readonly struct VertexPositionColor
+    {
+        public static readonly unsafe int SizeInBytes = sizeof(VertexPositionColor);
+
+        public static readonly Vortice.Direct3D11.InputElementDescription[] InputElements = {
+        new("POSITION", 0, Format.R32G32B32_Float, 0, 0),
+        new("COLOR", 0, Format.R32G32B32A32_Float, 12, 0)
+    };
+
+        public VertexPositionColor(in Vector3 position, in Color4 color)
+        {
+            Position = position;
+            Color = color;
+        }
+
+        public readonly Vector3 Position;
+        public readonly Color4 Color;
+    }
+
+    public readonly struct VertexPositionNormalTexture
+    {
+        public static readonly unsafe int SizeInBytes = sizeof(VertexPositionNormalTexture);
+
+        public static readonly Vortice.Direct3D11.InputElementDescription[] InputElements = {
+        new("POSITION", 0, Format.R32G32B32_Float, 0, 0),
+        new("NORMAL", 0, Format.R32G32B32_Float, 12, 0),
+        new("TEXCOORD", 0, Format.R32G32_Float, 24, 0)
+    };
+
+        public VertexPositionNormalTexture(in Vector3 position, in Vector3 normal, in Vector2 textureCoordinate)
+        {
+            Position = position;
+            Normal = normal;
+            TextureCoordinate = textureCoordinate;
+        }
+
+        public readonly Vector3 Position;
+        public readonly Vector3 Normal;
+        public readonly Vector2 TextureCoordinate;
+    }
+}
