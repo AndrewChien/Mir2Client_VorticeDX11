@@ -1,5 +1,5 @@
 # Mir2Client_VorticeDX11
-。
+热血传奇水晶客户端中文版，使用VorticeDX11重制，以便于客户端进行AOT。
 <img src='https://github.com/AndrewChien/Blog/blob/master/source/VorticeDX11.png'/></br>
 
 ---
