@@ -603,11 +603,6 @@ namespace Client.MirGraphics
             }
         }
 
-        /// <summary>
-        /// 检查该索引对应的图片有无问题
-        /// </summary>
-        /// <param name="index"></param>
-        /// <returns></returns>
         public bool CheckImage(int index)
         {
             if (!_initialized)
@@ -691,16 +686,8 @@ namespace Client.MirGraphics
             return mi.TrueSize;
         }
 
-        /// <summary>
-        /// 在指定坐标处显示制定索引号图片
-        /// </summary>
-        /// <param name="index"></param>
-        /// <param name="x"></param>
-        /// <param name="y"></param>
         public void Draw(int index, int x, int y)
         {
-            //CMain.SaveError(DXManager.PrintParentMethod());//太多
-
             if (x >= Settings.ScreenWidth || y >= Settings.ScreenHeight)
                 return;
 
@@ -719,8 +706,6 @@ namespace Client.MirGraphics
         }
         public void Draw(int index, Point point, Color colour, bool offSet = false)
         {
-            //CMain.SaveError(DXManager.PrintParentMethod());
-
             if (!CheckImage(index))
                 return;
 
@@ -738,8 +723,6 @@ namespace Client.MirGraphics
 
         public void Draw(int index, Point point, Color colour, bool offSet, float opacity)
         {
-            //CMain.SaveError(DXManager.PrintParentMethod());
-
             if (!CheckImage(index))
                 return;
 
@@ -751,9 +734,6 @@ namespace Client.MirGraphics
             if (point.X >= Settings.ScreenWidth || point.Y >= Settings.ScreenHeight || point.X + mi.Width < 0 || point.Y + mi.Height < 0)
                 return;
 
-            //debug:
-            //CMain.SaveError($"MLibrary.Draw_1()：DrawOpaque：图片位置{_fileName}图片编号{index}，0-0-{mi.Width}-{mi.Height},{point.X}-{point.Y}-0,{colour},{opacity}");
-
             DXManager.DrawOpaque(mi.Image, new Rectangle(0, 0, mi.Width, mi.Height), new Vector3((float)point.X, (float)point.Y, 0.0F), colour, opacity); 
 
             mi.CleanTime = CMain.Time + Settings.CleanDelay;
@@ -761,8 +741,6 @@ namespace Client.MirGraphics
 
         public void DrawBlend(int index, Point point, Color colour, bool offSet = false, float rate = 1)
         {
-            //CMain.SaveError(DXManager.PrintParentMethod());
-
             if (!CheckImage(index))
                 return;
 
@@ -783,8 +761,6 @@ namespace Client.MirGraphics
         }
         public void Draw(int index, Rectangle section, Point point, Color colour, bool offSet)
         {
-            //CMain.SaveError(DXManager.PrintParentMethod());
-
             if (!CheckImage(index))
                 return;
 
@@ -808,8 +784,6 @@ namespace Client.MirGraphics
         }
         public void Draw(int index, Rectangle section, Point point, Color colour, float opacity)
         {
-            //CMain.SaveError(DXManager.PrintParentMethod());
-
             if (!CheckImage(index))
                 return;
 
@@ -825,17 +799,12 @@ namespace Client.MirGraphics
             if (section.Bottom > mi.Height)
                 section.Height -= section.Bottom - mi.Height;
 
-            //debug:
-            //CMain.SaveError($"MLibrary.Draw_2()：DrawOpaque：图片位置{_fileName}图片编号{index}，0-0-{mi.Width}-{mi.Height},{point.X}-{point.Y}-0,{colour},{opacity}");
-
             DXManager.DrawOpaque(mi.Image, section, new Vector3((float)point.X, (float)point.Y, 0.0F), colour, opacity); 
 
             mi.CleanTime = CMain.Time + Settings.CleanDelay;
         }
         public void Draw(int index, Point point, Size size, Color colour)
         {
-            //CMain.SaveError(DXManager.PrintParentMethod());
-
             if (!CheckImage(index))
                 return;
 
@@ -847,15 +816,12 @@ namespace Client.MirGraphics
             float scaleX = (float)size.Width / mi.Width;
             float scaleY = (float)size.Height / mi.Height;
 
-            //Matrix matrix = Matrix.Scaling(scaleX, scaleY, 0);
             Matrix4x4 matrix = DXManager.MatrixScaling0(scaleX, scaleY);
 
-            //DXManager.Sprite.Transform = matrix;
             DXManager.SpriteTransform(matrix);
 
             DXManager.Draw(mi.Image, new Rectangle(0, 0, mi.Width, mi.Height), new Vector3((float)point.X / scaleX, (float)point.Y / scaleY, 0.0F), Color.White);
 
-            //DXManager.Sprite.Transform = Matrix.Identity;
             DXManager.SpriteTransform(Matrix4x4.Identity);
 
             mi.CleanTime = CMain.Time + Settings.CleanDelay;
@@ -863,8 +829,6 @@ namespace Client.MirGraphics
 
         public void DrawTinted(int index, Point point, Color colour, Color Tint, bool offSet = false)
         {
-            //CMain.SaveError(DXManager.PrintParentMethod());
-
             if (!CheckImage(index))
                 return;
 
@@ -887,8 +851,6 @@ namespace Client.MirGraphics
 
         public void DrawUp(int index, int x, int y)
         {
-            //CMain.SaveError(DXManager.PrintParentMethod());
-
             if (x >= Settings.ScreenWidth)
                 return;
 
@@ -908,8 +870,6 @@ namespace Client.MirGraphics
         }
         public void DrawUpBlend(int index, Point point)
         {
-            //CMain.SaveError(DXManager.PrintParentMethod());
-
             if (!CheckImage(index))
                 return;
 
@@ -956,27 +916,23 @@ namespace Client.MirGraphics
         public int Length;
 
         public bool TextureValid;
-        //public Texture Image;
-        //lyo：Texture转换示例
         public Vortice.Direct3D11.ID3D11Texture2D Image;
 
-        //layer 2:
         public short MaskWidth, MaskHeight, MaskX, MaskY;
         public int MaskLength;
 
-        //public Texture MaskImage;
-        //lyo：Texture转换示例
         public Vortice.Direct3D11.ID3D11Texture2D MaskImage;
         public Boolean HasMask;
 
         public long CleanTime;
         public Size TrueSize;
 
+        private byte[] _alphaData;
+
         public unsafe byte* Data;
 
         public MImage(BinaryReader reader)
         {
-            //read layer 1
             Width = reader.ReadInt16();
             Height = reader.ReadInt16();
             X = reader.ReadInt16();
@@ -986,7 +942,6 @@ namespace Client.MirGraphics
             Shadow = reader.ReadByte();
             Length = reader.ReadInt32();
 
-            //check if there's a second layer and read it
             HasMask = ((Shadow >> 7) == 1) ? true : false;
             if (HasMask)
             {
@@ -999,901 +954,15 @@ namespace Client.MirGraphics
             }
         }
 
-
-        #region 所有的尝试
-
-        private unsafe void UseUpdateSubresourceCopy(BinaryReader reader)
-        {
-            int w = Width;// + (4 - Width % 4) % 4;
-            int h = Height;// + (4 - Height % 4) % 4;
-            var textureDesc = new Vortice.Direct3D11.Texture2DDescription
-            {
-                Width = (uint)w,
-                Height = (uint)h,
-                MipLevels = 1,
-                ArraySize = 1,
-                Format = Vortice.DXGI.Format.B8G8R8A8_UNorm,
-                SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
-                Usage = Vortice.Direct3D11.ResourceUsage.Dynamic,
-                BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource,
-                CPUAccessFlags = Vortice.Direct3D11.CpuAccessFlags.Write,
-                MiscFlags = Vortice.Direct3D11.ResourceOptionFlags.None,
-            };
-            Image = DXManager.Device.CreateTexture2D(textureDesc);
-            var stream = DXManager.DeviceContext.Map(Image, 0, Vortice.Direct3D11.MapMode.WriteDiscard,
-                Vortice.Direct3D11.MapFlags.None);
-
-            // 2. 解压数据到托管内存
-            var compressedData = reader.ReadBytes(Length);
-            byte[] decompressedData;
-            using (var inputStream = new MemoryStream(compressedData))
-            using (var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress))
-            using (var outputStream = new MemoryStream())
-            {
-                gzipStream.CopyTo(outputStream);
-                decompressedData = outputStream.ToArray();
-            }
-            // 3. 将数据从托管内存复制到非托管内存
-            Marshal.Copy(decompressedData, 0, stream.DataPointer, decompressedData.Length);
-            // 4. 创建纹理并更新资源
-            DXManager.DeviceContext.UpdateSubresource(
-                dstResource: Image,
-                dstSubresource: 0,
-                dstBox: null,
-                srcData: stream.DataPointer,
-                srcRowPitch: stream.RowPitch,
-                srcDepthPitch: 0);
-            DXManager.DeviceContext.Unmap(Image, 0);
-
-        }
-
-        private unsafe void UseMashalArrayCopy(BinaryReader reader)
-        {
-            int w = Width;// + (4 - Width % 4) % 4;
-            int h = Height;// + (4 - Height % 4) % 4;
-
-            // 1. 解压数据到内存流
-            byte[] decompressedData;
-            using (var compressedStream = new MemoryStream(reader.ReadBytes(Length)))
-            using (var gzipStream = new GZipStream(compressedStream, CompressionMode.Decompress))
-            using (var decompressedStream = new MemoryStream())
-            {
-                gzipStream.CopyTo(decompressedStream);
-                decompressedData = decompressedStream.ToArray();
-            }
-
-            // 2. 创建D3D11纹理
-            var textureDesc = new Texture2DDescription
-            {
-                Width = (uint)w,
-                Height = (uint)h,
-                MipLevels = 1,
-                ArraySize = 1,
-                Format = Format.B8G8R8A8_UNorm,
-                SampleDescription = new SampleDescription(1, 0),
-                Usage = ResourceUsage.Dynamic,
-                BindFlags = BindFlags.ShaderResource,
-                CPUAccessFlags = CpuAccessFlags.Write
-            };
-
-            Image = DXManager.Device.CreateTexture2D(textureDesc);
-
-            // 3. 映射并写入纹理数据
-            var stream = DXManager.DeviceContext.Map(Image, 0, MapMode.WriteDiscard, 0);
-            Data = (byte*)stream.DataPointer;
-            try
-            {
-                fixed (byte* srcPtr = decompressedData)
-                {
-                    Buffer.MemoryCopy(
-                        source: srcPtr,
-                        destination: stream.DataPointer.ToPointer(),
-                        destinationSizeInBytes: (ulong)(stream.RowPitch * h),
-                        sourceBytesToCopy: (ulong)decompressedData.Length);
-                }
-            }
-            finally
-            {
-                DXManager.DeviceContext.Unmap(Image, 0);
-            }
-
-
-            DXManager.TextureList.Add(this);
-            TextureValid = true;
-
-            CleanTime = CMain.Time + Settings.CleanDelay;
-        }
-
-        private unsafe void UseOriginUngzip1(BinaryReader reader)
-        {
-            int w = Width;// + (4 - Width % 4) % 4;
-            int h = Height;// + (4 - Height % 4) % 4;
-                           //1、创建纹理
-            var textureDesc = new Vortice.Direct3D11.Texture2DDescription
-            {
-                Width = (uint)w,
-                Height = (uint)h,
-                MipLevels = 1,
-                ArraySize = 1,
-                Format = Vortice.DXGI.Format.B8G8R8A8_UNorm,
-                SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
-                Usage = Vortice.Direct3D11.ResourceUsage.Dynamic,
-                BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource,
-                CPUAccessFlags = Vortice.Direct3D11.CpuAccessFlags.Write,
-                //MiscFlags = Vortice.Direct3D11.ResourceOptionFlags.None,
-            };
-            Image = DXManager.Device.CreateTexture2D(textureDesc);
-
-            //2、锁纹理
-            var stream = DXManager.DeviceContext.Map(Image, 0, Vortice.Direct3D11.MapMode.WriteDiscard, 0);
-            Data = (byte*)stream.DataPointer;
-
-            //gzip解压
-            byte[] textureData;
-            using (MemoryStream ms = new MemoryStream())
-            {
-                DecompressImage(reader.ReadBytes(Length), ms);
-                //sourceStream.CopyTo(ms);
-                textureData = ms.ToArray();
-            }
-
-            //数组数据复制到MappedSubresource
-            unsafe
-            {
-                byte* destPtr = (byte*)stream.DataPointer.ToPointer();
-                fixed (byte* srcPtr = textureData)
-                {
-                    Buffer.MemoryCopy(srcPtr, destPtr, textureData.Length, textureData.Length);
-                }
-            }
-
-            //// 或使用Marshal.Copy（需处理行对齐）（结果相同）
-            //Marshal.Copy(textureData, 0, stream.DataPointer, textureData.Length);
-
-            //6、解锁纹理
-            DXManager.DeviceContext.Unmap(Image, 0);
-
-            DXManager.TextureList.Add(this);
-            TextureValid = true;
-
-            CleanTime = CMain.Time + Settings.CleanDelay;
-        }
-
-        private unsafe void UseOriginUngzip2(BinaryReader reader)
-        {
-            //OldGzipCopy(reader);
-            //return;
-
-            int w = Width;// + (4 - Width % 4) % 4;
-            int h = Height;// + (4 - Height % 4) % 4;
-
-            //原：
-            //Image = new Texture(DXManager.Device, w, h, 1, Usage.None, Format.A8R8G8B8, Pool.Managed);
-            //DataRectangle stream = Image.LockRectangle(0, LockFlags.Discard);
-            //Data = (byte*)stream.Data.DataPointer;
-            //DecompressImage(reader.ReadBytes(Length), stream.Data);
-            //stream.Data.Dispose();
-            //Image.UnlockRectangle(0);
-
-            //1、创建纹理
-            var textureDesc = new Vortice.Direct3D11.Texture2DDescription
-            {
-                Width = (uint)w,
-                Height = (uint)h,
-                MipLevels = 1,
-                ArraySize = 1,
-                Format = Vortice.DXGI.Format.B8G8R8A8_UNorm,
-                SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
-                Usage = Vortice.Direct3D11.ResourceUsage.Dynamic,
-                BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource,
-                CPUAccessFlags = Vortice.Direct3D11.CpuAccessFlags.Write,
-                MiscFlags = Vortice.Direct3D11.ResourceOptionFlags.None,
-            };
-            Image = DXManager.Device.CreateTexture2D(textureDesc);
-
-            //2、锁纹理
-            var stream = DXManager.DeviceContext.Map(Image, 0, Vortice.Direct3D11.MapMode.WriteDiscard,
-                Vortice.Direct3D11.MapFlags.None);
-
-            //3、解压数据到托管内存
-
-            byte[] decompressedData = DecompressImage(reader.ReadBytes(Length));
-
-            //var compressedData = reader.ReadBytes(Length);
-            //byte[] decompressedData;
-            //using (var inputStream = new MemoryStream(compressedData))
-            //using (var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress))
-            //using (var outputStream = new MemoryStream())
-            //{
-            //    gzipStream.CopyTo(outputStream);
-            //    decompressedData = outputStream.ToArray();
-            //}
-            //4、将数据从托管内存复制到非托管内存
-            Marshal.Copy(decompressedData, 0, stream.DataPointer, decompressedData.Length);
-            //5、将数据从非托管内存更新到纹理
-            DXManager.DeviceContext.UpdateSubresource(Image, 0, null, stream.DataPointer, stream.RowPitch, 0);
-
-            //6、解锁纹理
-            DXManager.DeviceContext.Unmap(Image, 0);
-
-            if (HasMask)
-            {
-                reader.ReadBytes(12);
-                w = Width;// + (4 - Width % 4) % 4;
-                h = Height;// + (4 - Height % 4) % 4;
-
-                //MaskImage = new Texture(DXManager.Device, w, h, 1, Usage.None, Format.A8R8G8B8, Pool.Managed);
-                MaskImage = DXManager.Device.CreateTexture2D(textureDesc);
-
-                //stream = MaskImage.LockRectangle(0, LockFlags.Discard);
-                stream = DXManager.DeviceContext.Map(MaskImage, 0, Vortice.Direct3D11.MapMode.WriteDiscard,
-                    Vortice.Direct3D11.MapFlags.None);
-
-                //DecompressImage(reader.ReadBytes(Length), stream);
-                var compressedData1 = reader.ReadBytes(Length);
-                byte[] decompressedData1;
-                using (var inputStream = new MemoryStream(compressedData1))
-                using (var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress))
-                using (var outputStream = new MemoryStream())
-                {
-                    gzipStream.CopyTo(outputStream);
-                    decompressedData1 = outputStream.ToArray();
-                }
-                Marshal.Copy(decompressedData1, 0, stream.DataPointer, decompressedData1.Length);
-                DXManager.DeviceContext.UpdateSubresource(MaskImage, 0, null, stream.DataPointer, stream.RowPitch, 0);
-
-                //MaskImage.UnlockRectangle(0);
-                DXManager.DeviceContext.Unmap(MaskImage, 0);
-            }
-
-            DXManager.TextureList.Add(this);
-            TextureValid = true;
-
-            CleanTime = CMain.Time + Settings.CleanDelay;
-        }
-
-        private unsafe void UseOriginUngzip3(BinaryReader reader)
-        {
-            //OldGzipCopy(reader);
-            //return;
-
-            int w = Width;// + (4 - Width % 4) % 4;
-            int h = Height;// + (4 - Height % 4) % 4;
-
-            //原：
-            //Image = new Texture(DXManager.Device, w, h, 1, Usage.None, Format.A8R8G8B8, Pool.Managed);
-            //DataRectangle stream = Image.LockRectangle(0, LockFlags.Discard);
-            //Data = (byte*)stream.Data.DataPointer;
-            //DecompressImage(reader.ReadBytes(Length), stream.Data);
-            //stream.Data.Dispose();
-            //Image.UnlockRectangle(0);
-
-            //1、创建纹理
-            var textureDesc = new Vortice.Direct3D11.Texture2DDescription
-            {
-                Width = (uint)w,
-                Height = (uint)h,
-                MipLevels = 1,
-                ArraySize = 1,
-                Format = Vortice.DXGI.Format.B8G8R8A8_UNorm,
-                SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
-                Usage = Vortice.Direct3D11.ResourceUsage.Dynamic,
-                BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource,
-                CPUAccessFlags = Vortice.Direct3D11.CpuAccessFlags.Write,
-                MiscFlags = Vortice.Direct3D11.ResourceOptionFlags.None,
-            };
-            Image = DXManager.Device.CreateTexture2D(textureDesc);
-
-            //2、锁纹理
-            var stream = DXManager.DeviceContext.Map(Image, 0, Vortice.Direct3D11.MapMode.WriteDiscard,
-                Vortice.Direct3D11.MapFlags.None);
-
-            //3、解压数据到托管内存
-
-            byte[] decompressedData = DecompressImage(reader.ReadBytes(Length));
-
-            //var compressedData = reader.ReadBytes(Length);
-            //byte[] decompressedData;
-            //using (var inputStream = new MemoryStream(compressedData))
-            //using (var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress))
-            //using (var outputStream = new MemoryStream())
-            //{
-            //    gzipStream.CopyTo(outputStream);
-            //    decompressedData = outputStream.ToArray();
-            //}
-            //4、将数据从托管内存复制到非托管内存
-            Marshal.Copy(decompressedData, 0, stream.DataPointer, decompressedData.Length);
-            //5、将数据从非托管内存更新到纹理
-            DXManager.DeviceContext.UpdateSubresource(Image, 0, null, stream.DataPointer, stream.RowPitch, 0);
-
-            //6、解锁纹理
-            DXManager.DeviceContext.Unmap(Image, 0);
-
-            if (HasMask)
-            {
-                reader.ReadBytes(12);
-                w = Width;// + (4 - Width % 4) % 4;
-                h = Height;// + (4 - Height % 4) % 4;
-
-                //MaskImage = new Texture(DXManager.Device, w, h, 1, Usage.None, Format.A8R8G8B8, Pool.Managed);
-                MaskImage = DXManager.Device.CreateTexture2D(textureDesc);
-
-                //stream = MaskImage.LockRectangle(0, LockFlags.Discard);
-                stream = DXManager.DeviceContext.Map(MaskImage, 0, Vortice.Direct3D11.MapMode.WriteDiscard,
-                    Vortice.Direct3D11.MapFlags.None);
-
-                //DecompressImage(reader.ReadBytes(Length), stream);
-                var compressedData1 = reader.ReadBytes(Length);
-                byte[] decompressedData1;
-                using (var inputStream = new MemoryStream(compressedData1))
-                using (var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress))
-                using (var outputStream = new MemoryStream())
-                {
-                    gzipStream.CopyTo(outputStream);
-                    decompressedData1 = outputStream.ToArray();
-                }
-                Marshal.Copy(decompressedData1, 0, stream.DataPointer, decompressedData1.Length);
-                DXManager.DeviceContext.UpdateSubresource(MaskImage, 0, null, stream.DataPointer, stream.RowPitch, 0);
-
-                //MaskImage.UnlockRectangle(0);
-                DXManager.DeviceContext.Unmap(MaskImage, 0);
-            }
-
-            DXManager.TextureList.Add(this);
-            TextureValid = true;
-
-            CleanTime = CMain.Time + Settings.CleanDelay;
-        }
-
-        // Twiddle格式转换算法（Z形排列）
-        private static int CalculateTwiddleIndex(int x, int y, int width)
-        {
-            int index = 0;
-            for (int shift = 1; width > shift; shift <<= 1)
-            {
-                index |= (x & shift) << shift | (y & shift) << (shift + 1);
-            }
-            return index;
-        }
-
-        private unsafe void UseTwiddle(BinaryReader reader)
-        {
-            int w = Width;// + (4 - Width % 4) % 4;
-            int h = Height;// + (4 - Height % 4) % 4;
-
-            var format = Vortice.DXGI.Format.B8G8R8A8_UNorm;
-            // 验证数据
-            int bytesPerPixel = format == Format.B8G8R8A8_UNorm ? 4 : throw new NotSupportedException();
-
-
-            //3、解压数据到托管内存
-            var compressedData = reader.ReadBytes(Length);
-            byte[] decompressedData;
-            using (var inputStream = new MemoryStream(compressedData))
-            using (var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress))
-            using (var outputStream = new MemoryStream())
-            {
-                gzipStream.CopyTo(outputStream);
-                decompressedData = outputStream.ToArray();
-            }
-
-            // 验证数据
-            if (decompressedData.Length != w * h * bytesPerPixel)
-                throw new ArgumentException("Image data size does not match texture dimensions");
-
-            // 创建纹理描述
-            var textureDesc = new Texture2DDescription
-            {
-                Width = (uint)w,
-                Height = (uint)h,
-                MipLevels = 1,
-                ArraySize = 1,
-                Format = format,
-                SampleDescription = new SampleDescription(1, 0),
-                Usage = ResourceUsage.Default,
-                BindFlags = BindFlags.ShaderResource | BindFlags.RenderTarget,
-                CPUAccessFlags = CpuAccessFlags.None,
-                MiscFlags = ResourceOptionFlags.None
-            };
-
-            // 创建临时staging纹理用于CPU写入
-            var stagingDesc = textureDesc;
-            stagingDesc.Usage = ResourceUsage.Staging;
-            stagingDesc.BindFlags = BindFlags.None;
-            stagingDesc.CPUAccessFlags = CpuAccessFlags.Write;
-
-            var stagingTexture = DXManager.Device.CreateTexture2D(stagingDesc);
-            //using (var stagingTexture = device.CreateTexture2D(stagingDesc))
-            {
-                // 映射纹理内存
-                var mapped = DXManager.Device.ImmediateContext.Map(stagingTexture, 0, MapMode.Write, Vortice.Direct3D11.MapFlags.None);
-                Data = (byte*)mapped.DataPointer;
-
-                try
-                {
-                    unsafe
-                    {
-                        byte* pData = (byte*)mapped.DataPointer;
-                        uint rowPitch = mapped.RowPitch;
-
-                        // 按twiddle格式写入数据
-                        for (int y = 0; y < h; y++)
-                        {
-                            for (int x = 0; x < w; x++)
-                            {
-                                // 计算twiddle索引
-                                int twiddleIndex = CalculateTwiddleIndex(x, y, w);
-
-                                // 计算目标内存位置
-                                long destOffset = y * rowPitch + x * bytesPerPixel;
-
-                                // 计算源数据位置
-                                int srcOffset = twiddleIndex * bytesPerPixel;
-
-                                // 复制像素数据
-                                for (int i = 0; i < bytesPerPixel; i++)
-                                {
-                                    pData[destOffset + i] = decompressedData[srcOffset + i];
-                                }
-                            }
-                        }
-                    }
-                }
-                finally
-                {
-                    DXManager.Device.ImmediateContext.Unmap(stagingTexture, 0);
-                }
-
-                // 将数据从staging纹理复制到最终纹理
-                DXManager.Device.ImmediateContext.CopyResource(stagingTexture, Image);
-            }
-
-            DXManager.TextureList.Add(this);
-            TextureValid = true;
-
-            CleanTime = CMain.Time + Settings.CleanDelay;
-        }
-
-        // 改进的Twiddle格式转换算法
-        private static int CalculateTwiddleIndex(int x, int y, int width, int height)
-        {
-            if (x < 0 || x >= width || y < 0 || y >= height)
-                throw new ArgumentOutOfRangeException("Coordinates out of texture bounds");
-
-            int index = 0;
-            int mask = 1;
-            while (mask < width || mask < height)
-            {
-                index |= (x & mask) << mask | (y & mask) << (mask + 1);
-                mask <<= 1;
-            }
-            return Math.Min(index, width * height - 1); // 确保不超过最大索引
-        }
-
-        public unsafe void UseTwiddle2(BinaryReader reader)
-        {
-            var format = Vortice.DXGI.Format.B8G8R8A8_UNorm;
-            uint w = (uint)Width;// + (4 - Width % 4) % 4;
-            uint h = (uint)Height;// + (4 - Height % 4) % 4;
-            //3、解压数据到托管内存
-            var compressedData = reader.ReadBytes(Length);
-            byte[] decompressedData;
-            using (var inputStream = new MemoryStream(compressedData))
-            using (var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress))
-            using (var outputStream = new MemoryStream())
-            {
-                gzipStream.CopyTo(outputStream);
-                decompressedData = outputStream.ToArray();
-            }
-
-            // 参数验证
-            if (DXManager.Device == null) throw new ArgumentNullException(nameof(DXManager.Device));
-            if (decompressedData == null) throw new ArgumentNullException(nameof(decompressedData));
-
-            int bytesPerPixel = format == Format.B8G8R8A8_UNorm ? 4 :
-                              format == Format.R8G8B8A8_UNorm ? 4 :
-                              throw new NotSupportedException("Unsupported texture format");
-
-            long expectedDataSize = w * h * bytesPerPixel;
-            if (decompressedData.Length < expectedDataSize)
-                throw new ArgumentException($"Image data size too small. Expected {expectedDataSize} bytes, got {decompressedData.Length}");
-
-            // 创建或验证目标纹理
-            if (Image == null)
-            {
-                var textureDesc = new Texture2DDescription
-                {
-                    //Width = w,
-                    //Height = h,
-                    //MipLevels = 1,
-                    //ArraySize = 1,
-                    //Format = format,
-                    //SampleDescription = new SampleDescription(1, 0),
-                    //Usage = ResourceUsage.Default,
-                    //BindFlags = BindFlags.ShaderResource | BindFlags.RenderTarget,
-                    //CPUAccessFlags = CpuAccessFlags.None,
-                    //MiscFlags = ResourceOptionFlags.None
-
-                    Width = (uint)w,
-                    Height = (uint)h,
-                    MipLevels = 1,
-                    ArraySize = 1,
-                    Format = Vortice.DXGI.Format.B8G8R8A8_UNorm,
-                    SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
-                    Usage = Vortice.Direct3D11.ResourceUsage.Dynamic,
-                    BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource,
-                    CPUAccessFlags = Vortice.Direct3D11.CpuAccessFlags.Write,
-                    //MiscFlags = Vortice.Direct3D11.ResourceOptionFlags.None,
-                };
-                Image = DXManager.Device.CreateTexture2D(textureDesc);
-            }
-            else
-            {
-                var desc = Image.Description;
-                if (desc.Width != w || desc.Height != h || desc.Format != format)
-                    throw new ArgumentException("Destination texture dimensions/format mismatch");
-            }
-
-            // 创建staging纹理
-            var stagingDesc = new Texture2DDescription
-            {
-                Width = w,
-                Height = h,
-                MipLevels = 1,
-                ArraySize = 1,
-                Format = format,
-                SampleDescription = new SampleDescription(1, 0),
-                Usage = ResourceUsage.Staging,
-                BindFlags = BindFlags.None,
-                //CPUAccessFlags = CpuAccessFlags.Write,
-                CPUAccessFlags = CpuAccessFlags.Read,
-                MiscFlags = ResourceOptionFlags.None
-            };
-
-            using (var stagingTexture = DXManager.Device.CreateTexture2D(stagingDesc))
-            {
-                // 映射纹理内存
-                //var mapped = DXManager.Device.ImmediateContext.Map(stagingTexture, 0, MapMode.Write, Vortice.Direct3D11.MapFlags.None);
-                var mapped = DXManager.Device.ImmediateContext.Map(stagingTexture, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None);
-                Data = (byte*)mapped.DataPointer;
-
-                try
-                {
-                    unsafe
-                    {
-                        byte* pData = (byte*)mapped.DataPointer;
-                        uint rowPitch = mapped.RowPitch;
-
-                        // 安全写入数据
-                        for (int y = 0; y < h; y++)
-                        {
-                            for (int x = 0; x < w; x++)
-                            {
-                                int twiddleIndex = CalculateTwiddleIndex(x, y, (int)w, (int)h);
-                                int srcOffset = twiddleIndex * bytesPerPixel;
-
-                                // 边界检查
-                                if (srcOffset + bytesPerPixel > decompressedData.Length)
-                                    throw new IndexOutOfRangeException("Source data access out of bounds");
-
-                                long destOffset = y * rowPitch + x * bytesPerPixel;
-
-                                // 边界检查
-                                if (destOffset + bytesPerPixel > rowPitch * h)
-                                    throw new IndexOutOfRangeException("Destination texture access out of bounds");
-
-                                // 安全复制像素数据
-                                for (int i = 0; i < bytesPerPixel; i++)
-                                {
-                                    pData[destOffset + i] = decompressedData[srcOffset + i];
-                                }
-                            }
-                        }
-                    }
-                }
-                finally
-                {
-                    DXManager.Device.ImmediateContext.Unmap(stagingTexture, 0);
-                }
-
-                // 复制到目标纹理
-                DXManager.Device.ImmediateContext.CopyResource(stagingTexture, Image);
-            }
-
-            DXManager.TextureList.Add(this);
-            TextureValid = true;
-            CleanTime = CMain.Time + Settings.CleanDelay;
-
-
-
-            //检查图像完整2
-            if (num2++ < count)
-            {
-                GrabImage.ShowImageFromGPU(DXManager.Device, Image);
-            }
-        }
-
-        public unsafe void UseCppWay(BinaryReader reader)
-        {
-            //3、解压数据到托管内存
-            var compressedData = reader.ReadBytes(Length);
-            byte[] decompressedData;
-            using (var inputStream = new MemoryStream(compressedData))
-            using (var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress))
-            using (var outputStream = new MemoryStream())
-            {
-                gzipStream.CopyTo(outputStream);
-                decompressedData = outputStream.ToArray();
-            }
-
-            //检查图像完整1
-            if (num1++ < count)
-            {
-                GrabImage.ShowImageFromCPU(decompressedData, Width, Height);
-            }
-
-            // 1. 创建纹理描述
-            //D3D11_TEXTURE2D_DESC texDesc;
-            //ZeroMemory(&texDesc, sizeof(texDesc));
-            //texDesc.Width = width;
-            //texDesc.Height = height;
-            //texDesc.MipLevels = 1;
-            //texDesc.ArraySize = 1;
-            //texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-            //texDesc.SampleDesc.Count = 1;
-            //texDesc.Usage = D3D11_USAGE_DEFAULT;
-            //texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-            //texDesc.CPUAccessFlags = 0;
-            //texDesc.MiscFlags = 0;
-
-            var texDesc = new Vortice.Direct3D11.Texture2DDescription
-            {
-                Width = (uint)Width,
-                Height = (uint)Height,
-                MipLevels = 1,
-                ArraySize = 1,
-                Format = Vortice.DXGI.Format.B8G8R8A8_UNorm, // 对应A8R8G8B8格式
-                SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
-                Usage = Vortice.Direct3D11.ResourceUsage.Dynamic,// Pool.Managed等效配置
-                BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource,// Usage.None默认绑定
-                CPUAccessFlags = Vortice.Direct3D11.CpuAccessFlags.Write,
-                //MiscFlags = Vortice.Direct3D11.ResourceOptionFlags.None,
-            };
-
-            //// 2. 初始化子资源数据
-            //D3D11_SUBRESOURCE_DATA initData;
-            //ZeroMemory(&initData, sizeof(initData));
-            //initData.pSysMem = imageData.data();
-            //initData.SysMemPitch = width * 4; // RGBA格式每行字节数
-            //initData.SysMemSlicePitch = 0;
-
-            //// 3. 创建纹理资源
-            //HRESULT hr = device->CreateTexture2D(&texDesc, &initData, ppTexture);
-            //if (FAILED(hr)) return hr;
-
-            // 2. 准备子资源数据（关键修正点）
-            var initData = new SubresourceData(Marshal.AllocHGlobal(decompressedData.Length), (uint)Width * 4, 0);
-            // 3. 复制数据到非托管内存
-            Marshal.Copy(decompressedData, 0, initData.DataPointer, decompressedData.Length);
-            try
-            {
-                // 4. 创建纹理资源
-                Image = DXManager.Device.CreateTexture2D(texDesc, new[] { initData });
-            }
-            finally
-            {
-                // 5. 释放非托管内存
-                Marshal.FreeHGlobal(initData.DataPointer);
-            }
-
-            //// 4. 创建着色器资源视图
-            //D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
-            //ZeroMemory(&srvDesc, sizeof(srvDesc));
-            //srvDesc.Format = texDesc.Format;
-            //srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-            //srvDesc.Texture2D.MipLevels = 1;
-
-            //device->CreateShaderResourceView(*ppTexture, &srvDesc, ppSRV);
-
-            //2、锁纹理
-            var stream = DXManager.DeviceContext.Map(Image, 0, Vortice.Direct3D11.MapMode.WriteDiscard, 0);
-            Data = (byte*)stream.DataPointer;
-
-            //4、将数据从托管内存复制到非托管内存
-            Marshal.Copy(decompressedData, 0, stream.DataPointer, decompressedData.Length);
-            //5、将数据从非托管内存更新到纹理
-            DXManager.DeviceContext.UpdateSubresource(Image, 0, null, stream.DataPointer, stream.RowPitch, stream.DepthPitch);
-
-            //6、解锁纹理
-            DXManager.DeviceContext.Unmap(Image, 0);
-
-            DXManager.TextureList.Add(this);
-            TextureValid = true;
-            CleanTime = CMain.Time + Settings.CleanDelay;
-
-            //检查图像完整2
-            if (num2++ < count)
-            {
-                GrabImage.ShowImageFromGPU(DXManager.Device, Image);
-            }
-        }
-
-        public unsafe void UseDirectXTexNet(BinaryReader reader)
-        {
-            //// 初始化DirectXTex库
-            ////DirectXTexNet.Initialize();
-
-            ////3、解压数据到托管内存
-            //var compressedData = reader.ReadBytes(Length);
-            //byte[] decompressedData;
-            //using (var inputStream = new MemoryStream(compressedData))
-            //using (var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress))
-            //using (var outputStream = new MemoryStream())
-            //{
-            //    gzipStream.CopyTo(outputStream);
-            //    decompressedData = outputStream.ToArray();
-            //}
-            //nint ptr = Marshal.AllocHGlobal(decompressedData.Length);
-            //Marshal.Copy(decompressedData, 0, ptr, decompressedData.Length);
-
-            //try
-            //{
-            //    // 从内存加载图像数据
-            //    var image = TexHelper.Instance.LoadFromWICMemory(ptr, decompressedData.Length,WIC_FLAGS.NONE);
-
-            //    // 转换为RGBA32格式确保兼容性
-            //    var convertedImage = image.Convert(DXGI_FORMAT.B8G8R8A8_UNORM,TEX_FILTER_FLAGS.DEFAULT,0.5f);
-
-            //    // 获取图像元数据
-            //    var metadata = convertedImage.GetMetadata();
-
-            //    // 准备D3D11纹理描述
-            //    var texDesc = new Texture2DDescription
-            //    {
-            //        Width = (uint)metadata.Width,
-            //        Height = (uint)metadata.Height,
-            //        MipLevels = 1,
-            //        ArraySize = 1,
-            //        Format = Vortice.DXGI.Format.B8G8R8A8_UNorm, // 对应A8R8G8B8格式
-            //        SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
-            //        Usage = Vortice.Direct3D11.ResourceUsage.Dynamic,// Pool.Managed等效配置
-            //        BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource,// Usage.None默认绑定
-            //        CPUAccessFlags = Vortice.Direct3D11.CpuAccessFlags.Write,
-            //        //MiscFlags = Vortice.Direct3D11.ResourceOptionFlags.None,
-            //    };
-
-            //    // 获取图像数据指针
-            //    var imageDataPtr = convertedImage.GetPixels();
-
-            //    // 创建D3D11纹理
-            //    Image = DXManager.Device.CreateTexture2D(texDesc, new[] { new SubresourceData(imageDataPtr, (uint)(metadata.Width * 4), 0) });
-            //}
-            //catch (COMException ex) when (ex.HResult == 0x88982F50)
-            //{
-            //    // 处理WIC组件缺失错误
-            //    Console.WriteLine("错误：缺少必要的WIC组件。请安装Windows Imaging Component编解码器包。");
-            //    // 可在此处添加自动下载或安装组件的逻辑
-            //    return;
-            //}
-            //finally
-            //{
-            //    // 清理DirectXTex资源
-            //    //DirectXTex.Shutdown();
-            //}
-
-            //DXManager.TextureList.Add(this);
-            //TextureValid = true;
-            //CleanTime = CMain.Time + Settings.CleanDelay;
-
-            ////检查图像完整2
-            //if (num2++ < count)
-            //{
-            //    GrabImage.ShowImageFromGPU(DXManager.Device, Image);
-            //}
-        }
-
-        // 1. 修正纹理创建函数
-        public unsafe void CreateTextureFromBytes(BinaryReader reader)
-        {
-            //3、解压数据到托管内存
-            var compressedData = reader.ReadBytes(Length);
-            byte[] decompressedData;
-            using (var inputStream = new MemoryStream(compressedData))
-            using (var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress))
-            using (var outputStream = new MemoryStream())
-            {
-                gzipStream.CopyTo(outputStream);
-                decompressedData = outputStream.ToArray();
-            }
-
-            //检查图像完整1
-            if (num1++ < count)
-            {
-                GrabImage.ShowImageFromCPU(decompressedData, Width, Height);
-            }
-
-            // 验证输入数据
-            if (decompressedData == null || decompressedData.Length == 0)
-                throw new ArgumentException("Invalid image data");
-
-            if (decompressedData.Length < Width * Height * 4)
-                throw new ArgumentException("Image data size does not match dimensions");
-
-            // 配置纹理描述 (关键修正点1)
-            var texDesc = new Vortice.Direct3D11.Texture2DDescription
-            {
-                Width = (uint)Width,
-                Height = (uint)Height,
-                MipLevels = 1,
-                ArraySize = 1,
-                Format = Vortice.DXGI.Format.B8G8R8A8_UNorm, // 对应A8R8G8B8格式
-                SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
-                Usage = Vortice.Direct3D11.ResourceUsage.Dynamic,// Pool.Managed等效配置
-                BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource,// Usage.None默认绑定
-                CPUAccessFlags = Vortice.Direct3D11.CpuAccessFlags.Write,
-                //MiscFlags = Vortice.Direct3D11.ResourceOptionFlags.None,
-            };
-
-            // 准备子资源数据 (关键修正点2)
-            var initData = new SubresourceData(Marshal.AllocHGlobal(decompressedData.Length), (uint)Width * 4, 0);
-
-            try
-            {
-                // 复制数据到非托管内存
-                Marshal.Copy(decompressedData, 0, initData.DataPointer, decompressedData.Length);
-
-                // 创建纹理资源
-                Image = DXManager.Device.CreateTexture2D(texDesc, new[] { initData });
-            }
-            finally
-            {
-                Marshal.FreeHGlobal(initData.DataPointer);
-            }
-
-            DXManager.TextureList.Add(this);
-            TextureValid = true;
-            CleanTime = CMain.Time + Settings.CleanDelay;
-
-            //检查图像完整2
-            if (num2++ < count)
-            {
-                GrabImage.ShowImageFromGPU(DXManager.Device, Image);
-            }
-
-            //2、锁纹理
-            var stream = DXManager.DeviceContext.Map(Image, 0, Vortice.Direct3D11.MapMode.WriteDiscard, 0);
-            Data = (byte*)stream.DataPointer;
-            DXManager.DeviceContext.Unmap(Image, 0);
-        }
-
-        #endregion
-
         public unsafe void CreateTexture(BinaryReader reader)
         {
-            //原：
-            //Image = new Texture(DXManager.Device, w, h, 1, Usage.None, Format.A8R8G8B8, Pool.Managed);
-            //DataRectangle stream = Image.LockRectangle(0, LockFlags.Discard);
-            //Data = (byte*)stream.Data.DataPointer;
-            //DecompressImage(reader.ReadBytes(Length), stream.Data);
-            //stream.Data.Dispose();
-            //Image.UnlockRectangle(0);
-
             var decompressedData = DecompressData(reader.ReadBytes(Length));
+            EnsureAlphaData(decompressedData);
             nint datapoint = 0;
             Image = DXManager.CreateTextureFromBytes(decompressedData, (uint)Width, (uint)Height, ref datapoint);
-            //Data = (byte*)datapoint;
-
-            //var stream = DXManager.DeviceContext.Map(Image, 0, Vortice.Direct3D11.MapMode.WriteDiscard, 0);
-            //Data = (byte*)stream.DataPointer;
-            //DXManager.DeviceContext.Unmap(Image, 0);
-
             if (HasMask)
             {
                 reader.ReadBytes(12);
-
-                //MaskImage = new Texture(DXManager.Device, w, h, 1, Usage.None, Format.A8R8G8B8, Pool.Managed);
-                //stream = MaskImage.LockRectangle(0, LockFlags.Discard);
-                //DecompressImage(reader.ReadBytes(Length), stream);
 
                 decompressedData = DecompressData(reader.ReadBytes(Length));
                 MaskImage = DXManager.CreateTextureFromBytes(decompressedData, (uint)Width, (uint)Height, ref datapoint);
@@ -1923,12 +992,21 @@ namespace Client.MirGraphics
             Image = null;
             MaskImage = null;
             Data = null;
+            _alphaData = null;
         }
 
         public unsafe bool VisiblePixel(Point p)
         {
             if (p.X < 0 || p.Y < 0 || p.X >= Width || p.Y >= Height)
                 return false;
+
+            if (_alphaData != null)
+            {
+                int index = p.Y * Width + p.X;
+                if ((uint)index >= (uint)_alphaData.Length)
+                    return false;
+                return _alphaData[index] != 0;
+            }
 
             int w = Width;
 
@@ -1947,6 +1025,24 @@ namespace Client.MirGraphics
                 else return true;
             }
             return result;
+        }
+
+        private void EnsureAlphaData(byte[] bgraData)
+        {
+            if (_alphaData != null)
+                return;
+
+            int pixelCount = checked(Width * Height);
+            int expectedBytes = checked(pixelCount * 4);
+            if (bgraData == null || bgraData.Length < expectedBytes)
+                return;
+
+            var alpha = new byte[pixelCount];
+            int src = 3;
+            for (int i = 0; i < pixelCount; i++, src += 4)
+                alpha[i] = bgraData[src];
+
+            _alphaData = alpha;
         }
 
         public Size GetTrueSize()

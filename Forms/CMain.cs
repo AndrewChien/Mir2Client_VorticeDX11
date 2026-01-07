@@ -22,9 +22,10 @@ namespace Client
         public static MirLabel DebugTextLabel, HintTextLabel, ScreenshotTextLabel;
         public static Graphics Graphics;
         public static Point MPoint;
+        private static bool _sysKeyMessageFilterInstalled;
 
         public readonly static Stopwatch Timer = Stopwatch.StartNew();
-        public readonly static DateTime StartTime = DateTime.UtcNow;
+        public readonly static DateTime StartTime = DateTime.Now;
         public static long Time;
         public static DateTime Now { get { return StartTime.AddMilliseconds(Time); } }
         public static readonly Random Random = new Random();
@@ -51,6 +52,8 @@ namespace Client
         {
             InitializeComponent();
 
+            EnsureSysKeyMessageFilter();
+
             Application.Idle += Application_Idle;
 
             MouseClick += CMain_MouseClick;
@@ -66,7 +69,9 @@ namespace Client
 
 
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.Selectable, true);
+            AutoScaleMode = AutoScaleMode.None;
             FormBorderStyle = Settings.FullScreen ? FormBorderStyle.None : FormBorderStyle.FixedDialog;
+            TopMost = Settings.TopMost;
 
             Graphics = CreateGraphics();
             Graphics.SmoothingMode = SmoothingMode.AntiAlias;
@@ -82,17 +87,16 @@ namespace Client
             this.Text = GameLanguage.GameName;
             try
             {
-                ClientSize = new Size(Settings.ScreenWidth, Settings.ScreenHeight);
+                ApplyWindowMode();
 
                 LoadMouseCursors();
                 SetMouseCursor(MouseCursor.Default);
 
-                //SlimDX.Configuration.EnableObjectTracking = true;
-                //改为设置FeatureMask中实现：d3D11Device.QueryInterface<ID3D11Debug>().FeatureMask = 0x1;
-
                 DXManager.Create();
                 SoundManager.Create();
-                CenterToScreen();
+
+                if (!Settings.FullScreen)
+                    CenterToScreen();
             }
             catch (Exception ex)
             {
@@ -175,12 +179,13 @@ namespace Client
             if (Settings.FullScreen || Settings.MouseClip)
                 Cursor.Clip = Program.Form.RectangleToScreen(Program.Form.ClientRectangle);
 
-            MPoint = Program.Form.PointToClient(Cursor.Position);
+            DXManager.TryMapClientToVirtual(e.Location, out MPoint);
+            var mappedArgs = new MouseEventArgs(e.Button, e.Clicks, MPoint.X, MPoint.Y, e.Delta);
 
             try
             {
                 if (MirScene.ActiveScene != null)
-                    MirScene.ActiveScene.OnMouseMove(e);
+                    MirScene.ActiveScene.OnMouseMove(mappedArgs);
             }
             catch (Exception ex)
             {
@@ -249,7 +254,11 @@ namespace Client
             try
             {
                 if (MirScene.ActiveScene != null)
-                    MirScene.ActiveScene.OnMouseClick(e);
+                {
+                    DXManager.TryMapClientToVirtual(e.Location, out MPoint);
+                    var mappedArgs = new MouseEventArgs(e.Button, e.Clicks, MPoint.X, MPoint.Y, e.Delta);
+                    MirScene.ActiveScene.OnMouseClick(mappedArgs);
+                }
             }
             catch (Exception ex)
             {
@@ -265,7 +274,11 @@ namespace Client
             try
             {
                 if (MirScene.ActiveScene != null)
-                    MirScene.ActiveScene.OnMouseUp(e);
+                {
+                    DXManager.TryMapClientToVirtual(e.Location, out MPoint);
+                    var mappedArgs = new MouseEventArgs(e.Button, e.Clicks, MPoint.X, MPoint.Y, e.Delta);
+                    MirScene.ActiveScene.OnMouseUp(mappedArgs);
+                }
             }
             catch (Exception ex)
             {
@@ -292,7 +305,11 @@ namespace Client
             try
             {
                 if (MirScene.ActiveScene != null)
-                    MirScene.ActiveScene.OnMouseDown(e);
+                {
+                    DXManager.TryMapClientToVirtual(e.Location, out MPoint);
+                    var mappedArgs = new MouseEventArgs(e.Button, e.Clicks, MPoint.X, MPoint.Y, e.Delta);
+                    MirScene.ActiveScene.OnMouseDown(mappedArgs);
+                }
             }
             catch (Exception ex)
             {
@@ -304,7 +321,11 @@ namespace Client
             try
             {
                 if (MirScene.ActiveScene != null)
-                    MirScene.ActiveScene.OnMouseClick(e);
+                {
+                    DXManager.TryMapClientToVirtual(e.Location, out MPoint);
+                    var mappedArgs = new MouseEventArgs(e.Button, e.Clicks, MPoint.X, MPoint.Y, e.Delta);
+                    MirScene.ActiveScene.OnMouseClick(mappedArgs);
+                }
             }
             catch (Exception ex)
             {
@@ -316,7 +337,11 @@ namespace Client
             try
             {
                 if (MirScene.ActiveScene != null)
-                    MirScene.ActiveScene.OnMouseWheel(e);
+                {
+                    DXManager.TryMapClientToVirtual(e.Location, out MPoint);
+                    var mappedArgs = new MouseEventArgs(e.Button, e.Clicks, MPoint.X, MPoint.Y, e.Delta);
+                    MirScene.ActiveScene.OnMouseWheel(mappedArgs);
+                }
             }
             catch (Exception ex)
             {
@@ -395,17 +420,13 @@ namespace Client
                     return;
                 }
 
-                //DXManager.DeviceClear_Target(Color.Black);//测试屏蔽
-                DXManager.SpriteBegin_AlphaBlend();
-
                 DXManager.SetSurface(ref DXManager.MainSurface);
+                DXManager.DeviceClear_Target(Color.Black);
+                DXManager.SpriteBegin_AlphaBlend();
 
                 if (MirScene.ActiveScene != null)
                 {
                     MirScene.ActiveScene.Draw();
-
-                    //测试
-                    //CMain.SaveError($"CMain.RenderEnvironment->{MirScene.ActiveScene}");
                 }
 
                 DXManager.Sprite_End();
@@ -429,7 +450,7 @@ namespace Client
 
                 text += string.Format(", DPS: {0}", DPS);
 
-                text += string.Format(", Time: {0:HH:mm:ss UTC}", Now);
+                text += string.Format(", Time: {0:HH:mm:ss}", Now);
 
                 if (MirControl.MouseControl is MapControl)
                     text += string.Format(", Co Ords: {0}", MapControl.MapLocation);
@@ -572,11 +593,7 @@ namespace Client
         {
             Settings.FullScreen = !Settings.FullScreen;
 
-            Program.Form.FormBorderStyle = Settings.FullScreen ? FormBorderStyle.None : FormBorderStyle.FixedDialog;
-
-            DXManager.Parameters.Windowed = !Settings.FullScreen;
-
-            Program.Form.ClientSize = new Size(Settings.ScreenWidth, Settings.ScreenHeight);
+            ApplyWindowMode();
 
             DXManager.ResetDevice();
 
@@ -586,7 +603,114 @@ namespace Client
                 GameScene.Scene.TextureValid = false;
             }
 
-            Program.Form.CenterToScreen();
+            if (!Settings.FullScreen)
+                Program.Form.CenterToScreen();
+        }
+
+        private static void ApplyWindowMode()
+        {
+            if (Program.Form == null || Program.Form.IsDisposed)
+                return;
+
+            Program.Form.TopMost = Settings.TopMost;
+
+            if (Settings.FullScreen)
+            {
+                Program.Form.WindowState = FormWindowState.Normal;
+                if (Program.Form.FormBorderStyle != FormBorderStyle.None)
+                    Program.Form.FormBorderStyle = FormBorderStyle.None;
+
+                Screen screen;
+                try
+                {
+                    screen = Program.Form.IsHandleCreated
+                        ? Screen.FromHandle(Program.Form.Handle)
+                        : Screen.PrimaryScreen;
+                }
+                catch
+                {
+                    screen = Screen.PrimaryScreen;
+                }
+
+                Program.Form.Bounds = screen.Bounds;
+                return;
+            }
+
+            Program.Form.WindowState = FormWindowState.Normal;
+            if (Program.Form.FormBorderStyle != FormBorderStyle.FixedDialog)
+                Program.Form.FormBorderStyle = FormBorderStyle.FixedDialog;
+            Program.Form.ClientSize = new Size(Settings.ScreenWidth, Settings.ScreenHeight);
+        }
+
+        public IntPtr ForceRecreateHandleForSwapChain()
+        {
+            if (IsDisposed)
+                return IntPtr.Zero;
+
+            if (InvokeRequired)
+            {
+                try
+                {
+                    return (IntPtr)Invoke(new Func<IntPtr>(ForceRecreateHandleForSwapChain));
+                }
+                catch
+                {
+                    return IntPtr.Zero;
+                }
+            }
+
+            try
+            {
+                if (!IsHandleCreated)
+                    CreateControl();
+
+                // Force a native HWND recreation. This can help DXGI recover from bad window/swapchain states.
+                RecreateHandle();
+            }
+            catch (Exception ex)
+            {
+                SaveError($"[HWND] RecreateHandle failed: {ex.Message}");
+            }
+
+            return Handle;
+        }
+
+        private static void EnsureSysKeyMessageFilter()
+        {
+            if (_sysKeyMessageFilterInstalled)
+                return;
+
+            Application.AddMessageFilter(new SysKeyMessageFilter());
+            _sysKeyMessageFilterInstalled = true;
+        }
+
+        private sealed class SysKeyMessageFilter : IMessageFilter
+        {
+            public bool PreFilterMessage(ref Message m)
+            {
+                const int WM_SYSKEYDOWN = 0x0104;
+                const int WM_SYSKEYUP = 0x0105;
+                const int WM_SYSCOMMAND = 0x0112;
+                const int VK_F10 = 0x79;
+                const int SC_KEYMENU = 0xF100;
+
+                if (m.Msg == WM_SYSKEYDOWN && m.WParam.ToInt32() == VK_F10)
+                {
+                    CMain_KeyDown(Program.Form ?? Form.ActiveForm, new KeyEventArgs(Keys.F10));
+                    return true;
+                }
+
+                if (m.Msg == WM_SYSKEYUP && m.WParam.ToInt32() == VK_F10)
+                {
+                    CMain_KeyUp(Program.Form ?? Form.ActiveForm, new KeyEventArgs(Keys.F10));
+                    return true;
+                }
+
+                if (m.Msg == WM_SYSCOMMAND && (m.WParam.ToInt32() & 0xFFF0) == SC_KEYMENU)
+                    return true;
+
+                return false;
+            }
         }
 
         public void CreateScreenShot()
@@ -597,45 +721,79 @@ namespace Client
                 Now.ToShortDateString(),
                 Now.TimeOfDay);
 
-            //Surface backbuffer = DXManager.Device.GetBackBuffer(0, 0);
-            var backbuffer = DXManager.DXGISwapChain.GetBuffer<Vortice.Direct3D11.ID3D11Texture2D>(0);
+            if (DXManager.DXGISwapChain == null || DXManager.Device == null || DXManager.DeviceContext == null)
+                return;
 
-            //using (var stream = Surface.ToStream(backbuffer, ImageFileFormat.Png))
-            var stream = DXManager.SurfaceToStream_Start(backbuffer);
+            Vortice.Direct3D11.ID3D11Texture2D backbuffer = null;
+            Vortice.Direct3D11.ID3D11Texture2D staging = null;
+
+            try
             {
-                Bitmap image = new Bitmap(stream);
+                backbuffer = DXManager.DXGISwapChain.GetBuffer<Vortice.Direct3D11.ID3D11Texture2D>(0);
+                var desc = backbuffer.Description;
 
-                using (Graphics graphics = Graphics.FromImage(image))
+                var stagingDesc = desc;
+                stagingDesc.Usage = ResourceUsage.Staging;
+                stagingDesc.BindFlags = BindFlags.None;
+                stagingDesc.CPUAccessFlags = CpuAccessFlags.Read;
+                stagingDesc.MiscFlags = ResourceOptionFlags.None;
+                stagingDesc.MipLevels = 1;
+                stagingDesc.ArraySize = 1;
+                stagingDesc.SampleDescription = new Vortice.DXGI.SampleDescription(1, 0);
+
+                staging = DXManager.Device.CreateTexture2D(stagingDesc);
+                DXManager.DeviceContext.CopyResource(staging, backbuffer);
+
+                var mapped = DXManager.DeviceContext.Map(staging, 0, MapMode.Read, MapFlags.None);
+                try
                 {
-                    StringFormat sf = new StringFormat
+                    using var temp = new Bitmap((int)desc.Width, (int)desc.Height, (int)mapped.RowPitch, PixelFormat.Format32bppPArgb, mapped.DataPointer);
+                    using var image = new Bitmap(temp);
+
+                    using (Graphics graphics = Graphics.FromImage(image))
                     {
-                        LineAlignment = StringAlignment.Center,
-                        Alignment = StringAlignment.Center
-                    };
+                        StringFormat sf = new StringFormat
+                        {
+                            LineAlignment = StringAlignment.Center,
+                            Alignment = StringAlignment.Center
+                        };
 
-                    graphics.DrawString(text, new Font(Settings.FontName, 9F), Brushes.Black, new Point((Settings.ScreenWidth / 2) + 3, 10), sf);
-                    graphics.DrawString(text, new Font(Settings.FontName, 9F), Brushes.Black, new Point((Settings.ScreenWidth / 2) + 4, 9), sf);
-                    graphics.DrawString(text, new Font(Settings.FontName, 9F), Brushes.Black, new Point((Settings.ScreenWidth / 2) + 5, 10), sf);
-                    graphics.DrawString(text, new Font(Settings.FontName, 9F), Brushes.Black, new Point((Settings.ScreenWidth / 2) + 4, 11), sf);
-                    graphics.DrawString(text, new Font(Settings.FontName, 9F), Brushes.White, new Point((Settings.ScreenWidth / 2) + 4, 10), sf);//SandyBrown               
+                        graphics.DrawString(text, new Font(Settings.FontName, 9F), Brushes.Black, new Point((Settings.ScreenWidth / 2) + 3, 10), sf);
+                        graphics.DrawString(text, new Font(Settings.FontName, 9F), Brushes.Black, new Point((Settings.ScreenWidth / 2) + 4, 9), sf);
+                        graphics.DrawString(text, new Font(Settings.FontName, 9F), Brushes.Black, new Point((Settings.ScreenWidth / 2) + 5, 10), sf);
+                        graphics.DrawString(text, new Font(Settings.FontName, 9F), Brushes.Black, new Point((Settings.ScreenWidth / 2) + 4, 11), sf);
+                        graphics.DrawString(text, new Font(Settings.FontName, 9F), Brushes.White, new Point((Settings.ScreenWidth / 2) + 4, 10), sf);//SandyBrown               
 
-                    string path = Path.Combine(Application.StartupPath, @"Screenshots\");
-                    if (!Directory.Exists(path))
-                        Directory.CreateDirectory(path);
+                        string path = Path.Combine(Application.StartupPath, @"Screenshots\");
+                        if (!Directory.Exists(path))
+                            Directory.CreateDirectory(path);
 
-                    int count = Directory.GetFiles(path, "*.png").Length;
+                        int count = Directory.GetFiles(path, "*.png").Length;
 
-                    image.Save(Path.Combine(path, string.Format("Image {0}.png", count)), ImageFormat.Png);
+                        image.Save(Path.Combine(path, string.Format("Image {0}.png", count)), ImageFormat.Png);
+                    }
+                }
+                finally
+                {
+                    DXManager.DeviceContext.Unmap(staging, 0);
                 }
             }
-            DXManager.SurfaceToStream_End(backbuffer, stream);
+            catch (Exception ex)
+            {
+                SaveError(ex.ToString());
+            }
+            finally
+            {
+                staging?.Dispose();
+                backbuffer?.Dispose();
+            }
         }
 
         public static void SaveError(string ex)
         {
             try
             {
-                //if (Settings.RemainingErrorLogs-- > 0)
+                if (Settings.RemainingErrorLogs-- > 0)
                 {
                     File.AppendAllText(@".\Error.txt",
                                        string.Format("[{0}] {1}{2}", Now, ex, Environment.NewLine));
@@ -652,12 +810,9 @@ namespace Client
 
             Settings.ScreenWidth = width;
             Settings.ScreenHeight = height;
-            Program.Form.ClientSize = new Size(width, height);
 
-            //DXManager.Device.Clear(ClearFlags.Target, Color.Black, 0, 0);
-            DXManager.DeviceClear_Target(Color.Black);
-            //DXManager.Device.Present();
-            DXManager.DevicePresent();
+            ApplyWindowMode();
+
             DXManager.ResetDevice();
 
             if (!Settings.FullScreen)
@@ -716,13 +871,27 @@ namespace Client
             }
         }
 
-        /// <summary>
-        /// lyo：Vortice.WinForms.RenderForm.WndProc()
-        /// </summary>
-        /// <param name="m"></param>
         protected override void WndProc(ref Message m)
         {
-            if (m.Msg == 0x0112) // WM_SYSCOMMAND
+            const int WM_SYSKEYDOWN = 0x0104;
+            const int WM_SYSKEYUP = 0x0105;
+            const int WM_SYSCOMMAND = 0x0112;
+            const int VK_F10 = 0x79;
+
+            if (m.Msg == WM_SYSKEYDOWN && m.WParam.ToInt32() == VK_F10)
+            {
+                CMain_KeyDown(this, new KeyEventArgs(Keys.F10));
+                m.Result = IntPtr.Zero;
+                return;
+            }
+            if (m.Msg == WM_SYSKEYUP && m.WParam.ToInt32() == VK_F10)
+            {
+                CMain_KeyUp(this, new KeyEventArgs(Keys.F10));
+                m.Result = IntPtr.Zero;
+                return;
+            }
+
+            if (m.Msg == WM_SYSCOMMAND) // WM_SYSCOMMAND
             {
                 if (m.WParam.ToInt32() == 0xF100) // SC_KEYMENU
                 {
@@ -793,9 +962,6 @@ namespace Client
             IntPtr hCurs = LoadCursorFromFile(path);
             if (hCurs == IntPtr.Zero) throw new Win32Exception();
             var curs = new Cursor(hCurs);
-            // Note: force the cursor to own the handle so it gets released properly
-            //var fi = typeof(Cursor).GetField("ownHandle", BindingFlags.NonPublic | BindingFlags.Instance);
-            //fi.SetValue(curs, true);
             return curs;
         }
 

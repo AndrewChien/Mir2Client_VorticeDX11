@@ -4484,7 +4484,7 @@ namespace Client.MirScenes.Dialogs
         private const int HealthBarHeight = 8;
 
         private readonly List<PlayerUI> playerUIList;
-        private readonly int clientWidth = Program.Form.ClientSize.Width;
+        private readonly int clientWidth = Settings.ScreenWidth;
 
         public GroupHealthPanel()
         {

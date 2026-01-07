@@ -178,6 +178,7 @@ namespace Client.MirControls
                 return;
 
             //ControlTexture.Release();//lyo add
+            DXManager.ReleaseTargetBitmap(ControlTexture);
             ControlTexture.Dispose();
             ControlTexture = null;
             TextureValid = false;
@@ -718,8 +719,6 @@ namespace Client.MirControls
 
         public virtual void Draw()
         {
-            CMain.SaveError(DXManager.PrintParentMethod() + $"MirControl开始Draw()");
-
             if (IsDisposed || !Visible /*|| Size.Width == 0 || Size.Height == 0*/ || Size.Width > Settings.ScreenWidth || Size.Height > Settings.ScreenHeight)
                 return;
 
@@ -729,13 +728,11 @@ namespace Client.MirControls
             //debug:
             if (ControlTexture != null)
             {
-                //CMain.SaveError($"MirControl.Draw()→DrawControl()：{ControlTexture.NativePointer}-{ControlTexture.Description.BindFlags}-{ControlTexture.Description.CPUAccessFlags}" +
-                //    $"-{ControlTexture.Description.Format}-{ControlTexture.Description.MiscFlags}-{ControlTexture.Description.Usage}," +
-                //    $"0-0-{Size.Width}-{Size.Height},{DisplayLocation.X}-{DisplayLocation.Y}-0,{Color.White},{Opacity}");
+
             }
             else
             {
-                //CMain.SaveError($"MirControl.Draw()→DrawControl()：null ControlTexture !!!");
+
             }
             DrawControl();
             DrawChildControls();
@@ -746,7 +743,6 @@ namespace Client.MirControls
 
             OnShown();
 
-            CMain.SaveError($"MirControl结束Draw()");
         }
 
         protected virtual void BeforeDrawControl()
@@ -757,41 +753,16 @@ namespace Client.MirControls
         static int num = 30;
         protected internal virtual void DrawControl()
         {
-            CMain.SaveError(DXManager.PrintParentMethod() + $"MirControl开始DrawControl()");
-
-            //CMain.SaveError($"已进入子类MirImageControl.DrawControl()");
             if (!DrawControlTexture)
                 return;
 
             if (!TextureValid)
             {
-                //CMain.SaveError($"MirControl:执行CreateTexture()");
                 CreateTexture();//去子类中执行
             }
 
-            if (ControlTexture == null || DXManager.CheckDeviceLost() || DXManager.QueryTextureStateFail(ControlTexture))
-            {
-                //CMain.SaveError($"MirControl:已退出，不执行DrawOpaque()");
-                return;
-            }
+            if (ControlTexture == null) return;
 
-            //try
-            //{
-            //    if (num-- > 0)
-            //    {
-            //        GrabImage.ShowImageFromGPU(DXManager.Device, ControlTexture);
-            //    }
-            //}
-            //catch (Exception e)
-            //{
-            //}
-
-            ////debug:
-            //CMain.SaveError($"MirControl.DrawControl()→准备执行DrawOpaque()：{ControlTexture.NativePointer}-{ControlTexture.Description.BindFlags}-{ControlTexture.Description.CPUAccessFlags}" +
-            //    $"-{ControlTexture.Description.Format}-{ControlTexture.Description.MiscFlags}-{ControlTexture.Description.Usage}," +
-            //    $"0-0-{Size.Width}-{Size.Height},{DisplayLocation.X}-{DisplayLocation.Y}-0,{Color.White},{Opacity}");
-
-            //绘制不透明层，图片大小=（0，0，图片宽，图片高），图片偏移：
             DXManager.DrawOpaque(ControlTexture, 
                 new Rectangle(0, 0, Size.Width, Size.Height), 
                 new Vector3?(new Vector3((float)(DisplayLocation.X), 
@@ -800,8 +771,6 @@ namespace Client.MirControls
                 Opacity);
 
             CleanTime = CMain.Time + Settings.CleanDelay;
-
-            CMain.SaveError($"MirControl结束DrawControl()");
         }
         protected void DrawChildControls()
         {
@@ -814,9 +783,7 @@ namespace Client.MirControls
         {
             if (!Border || BorderInfo == null)
                 return;
-            //DXManager.Sprite.Flush();
             DXManager.Sprite_Flush();
-            //DXManager.Line.Draw(BorderInfo, _borderColour);
             DXManager.LineDraw(BorderInfo, _borderColour);
         }
         protected void AfterDrawControl()
@@ -1088,18 +1055,13 @@ namespace Client.MirControls
 
         public void Dispose()
         {
-            CMain.SaveError(DXManager.PrintParentMethod() + $"MirControl开始本类Dispose()");
-
             if (IsDisposed)
                 return;
             Dispose(true);
-            CMain.SaveError($"MirControl结束本类Dispose()");
         }
 
         protected virtual void Dispose(bool disposing)
         {
-            CMain.SaveError(DXManager.PrintParentMethod() + $"MirControl开始虚类Dispose()");
-
             if (disposing)
             {
                 if (Disposing != null)
@@ -1197,7 +1159,6 @@ namespace Client.MirControls
             }
 
             IsDisposed = true;
-            CMain.SaveError($"MirControl结束虚类Dispose()");
         }
         #endregion
 

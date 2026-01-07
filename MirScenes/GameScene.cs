@@ -1097,8 +1097,6 @@ namespace Client.MirScenes
 
         protected internal override void DrawControl()   //由 MirScene.Draw() 触发
         {
-            CMain.SaveError(DXManager.PrintParentMethod() + $"GameScene开始DrawControl()");
-
             if (MapControl != null && !MapControl.IsDisposed)
                 MapControl.DrawControl();
             base.DrawControl();
@@ -1121,8 +1119,6 @@ namespace Client.MirScenes
 
             for (int i = 0; i < OutputLines.Length; i++)
                 OutputLines[i].Draw();
-
-            CMain.SaveError($"GameScene结束DrawControl()");
         }
         public override void Process()
         {
@@ -10639,6 +10635,7 @@ namespace Client.MirScenes
         public long LightningTime, FireTime;
         public WeatherSetting Weather = WeatherSetting.无效果;
         public bool FloorValid, LightsValid;
+        private Vortice.Direct3D11.ID3D11Texture2D _sceneTexture;
 
         public long OutputDelay;
 
@@ -10687,7 +10684,7 @@ namespace Client.MirScenes
             BackColour = Color.Black;
 
             MouseDown += OnMouseDown;
-            MouseMove += (o, e) => MouseLocation = e.Location;
+            MouseMove += (o, e) => MouseLocation = CMain.MPoint;
             Click += OnMouseClick;
         }
 
@@ -10850,7 +10847,15 @@ namespace Client.MirScenes
 
 
             if (Size != TextureSize)
+            {
                 DisposeTexture();
+                if (_sceneTexture != null)
+                {
+                    DXManager.ReleaseTargetBitmap(_sceneTexture);
+                    _sceneTexture.Dispose();
+                    _sceneTexture = null;
+                }
+            }
 
             if (ControlTexture == null)
             {
@@ -10861,10 +10866,11 @@ namespace Client.MirScenes
             }
 
             var oldSurface = DXManager.CurrentSurface;
-            //var surface = ControlTexture.GetSurfaceLevel(0);
-            var surface = DXManager.GetSurfaceLevel(ControlTexture, 0);
-            DXManager.SetSurface(ref surface);
-            //DXManager.Device.Clear(ClearFlags.Target, BackColour, 0, 0);
+            _sceneTexture ??= DXManager.NewTexture_RenderTarget_Default((uint)Size.Width, (uint)Size.Height);
+
+            // 1) Render base scene (without UI labels) into intermediate texture
+            var sceneSurface = DXManager.GetSurfaceLevel(_sceneTexture, 0);
+            DXManager.SetSurface(ref sceneSurface);
             DXManager.DeviceClear_Target(BackColour);
 
             DrawBackground();
@@ -10885,10 +10891,27 @@ namespace Client.MirScenes
             //Render Death, 
 
             LightSetting setting = Lights == LightSetting.Normal ? GameScene.Scene.Lights : Lights;
+            bool applyLights = setting != LightSetting.Day || GameScene.User.Poison.HasFlag(PoisonType.Blindness);
 
-            if (setting != LightSetting.Day || GameScene.User.Poison.HasFlag(PoisonType.Blindness))
+            if (applyLights)
             {
                 DrawLights(setting);
+            }
+
+            DXManager.Sprite_Flush();
+
+            // 2) Composite lit scene into final ControlTexture
+            var controlSurface = DXManager.GetSurfaceLevel(ControlTexture, 0);
+            DXManager.SetSurface(ref controlSurface);
+            DXManager.DeviceClear_Target(BackColour);
+
+            if (applyLights && DXManager.LightTexture != null)
+            {
+                DXManager.DrawMultiply(_sceneTexture, DXManager.LightTexture);
+            }
+            else
+            {
+                DXManager.Draw(_sceneTexture, new Rectangle(0, 0, Settings.ScreenWidth, Settings.ScreenHeight), Vector3.Zero, Color.White);
             }
 
             if (Settings.DropView || GameScene.DropViewTime > CMain.Time)
@@ -10937,7 +10960,8 @@ namespace Client.MirScenes
 
             DXManager.SetSurface(ref oldSurface);
             TextureValid = true;
-            surface.Dispose();
+            sceneSurface.Dispose();
+            controlSurface.Dispose();
 
         }
         protected internal override void DrawControl()   //由 GameScene.DrawControl() 触发
@@ -10980,7 +11004,12 @@ namespace Client.MirScenes
             }
 
             var oldSurface = DXManager.CurrentSurface;
-            DXManager.FloorSurface = DXManager.GetSurfaceLevel(DXManager.FloorTexture, 0);
+
+            if (DXManager.FloorSurface == null || DXManager.FloorSurface.NativePointer == nint.Zero)
+            {
+                DXManager.FloorSurface?.Dispose();
+                DXManager.FloorSurface = DXManager.GetSurfaceLevel(DXManager.FloorTexture, 0);
+            }
 
             DXManager.SetSurface(ref DXManager.FloorSurface);
             //DXManager.Device.Clear(ClearFlags.Target, Color.Empty, 0, 0); //Color.Black
@@ -11377,7 +11406,13 @@ namespace Client.MirScenes
             }
 
             var oldSurface = DXManager.CurrentSurface;
-            DXManager.LightSurface = DXManager.GetSurfaceLevel(DXManager.LightTexture, 0);
+
+            if (DXManager.LightSurface == null || DXManager.LightSurface.NativePointer == nint.Zero)
+            {
+                DXManager.LightSurface?.Dispose();
+                DXManager.LightSurface = DXManager.GetSurfaceLevel(DXManager.LightTexture, 0);
+            }
+
             DXManager.SetSurface(ref DXManager.LightSurface);
 
             #region Night Lights
@@ -11429,21 +11464,13 @@ namespace Client.MirScenes
 
             int light;
             Point p;
-            DXManager.SetBlend(true);
-            //DXManager.Device.SetRenderState(RenderState.SourceBlend, Blend.SourceAlpha);
-            //DXManager.Device.SetRenderState(RenderState.DestinationBlend, Blend.One);
-            DXManager.Device.ImmediateContext.OMSetBlendState(DXManager.Device.CreateBlendState(
-                new Vortice.Direct3D11.BlendDescription
+
+            var oldPrimitiveBlend = DXManager.D2D1Context != null ? DXManager.D2D1Context.PrimitiveBlend : Vortice.Direct2D1.PrimitiveBlend.SourceOver;
+            if (DXManager.D2D1Context != null)
+                DXManager.D2D1Context.PrimitiveBlend = Vortice.Direct2D1.PrimitiveBlend.Add;
+
+            try
             {
-                RenderTarget = new Vortice.Direct3D11.BlendDescription.RenderTarget__FixedBuffer()
-                {
-                    e0 = new Vortice.Direct3D11.RenderTargetBlendDescription
-                    {
-                        SourceBlend = Vortice.Direct3D11.Blend.SourceAlpha,//SourceBlend=SourceAlpha
-                        DestinationBlend = Vortice.Direct3D11.Blend.One,//DestinationBlend=One
-                    }
-                }
-            }));
 
             #region Object Lights (Player/Mob/NPC)
             for (int i = 0; i < Objects.Count; i++)
@@ -11621,32 +11648,16 @@ namespace Client.MirScenes
             }
             #endregion
 
-            DXManager.SetBlend(false);
+            }
+            finally
+            {
+                if (DXManager.D2D1Context != null)
+                    DXManager.D2D1Context.PrimitiveBlend = oldPrimitiveBlend;
+            }
+
             DXManager.Sprite_Flush();
             DXManager.SetSurface(ref oldSurface);
             LightsValid = true;
-
-            //DXManager.Device.SetRenderState(RenderState.SourceBlend, Blend.Zero);
-            //DXManager.Device.SetRenderState(RenderState.DestinationBlend, Blend.SourceColor);
-            DXManager.Device.ImmediateContext.OMSetBlendState(DXManager.Device.CreateBlendState(
-                new Vortice.Direct3D11.BlendDescription
-                {
-                    RenderTarget = new Vortice.Direct3D11.BlendDescription.RenderTarget__FixedBuffer()
-                    {
-                        e0 = new Vortice.Direct3D11.RenderTargetBlendDescription
-                        {
-                            SourceBlend = Vortice.Direct3D11.Blend.Zero,//SourceBlend=Zero
-                            DestinationBlend = Vortice.Direct3D11.Blend.SourceColor,//DestinationBlend=SourceColor
-                        }
-                    }
-                }));
-
-            DXManager.Draw(DXManager.LightTexture, new Rectangle(0, 0, Settings.ScreenWidth, Settings.ScreenHeight), Vector3.Zero, Color.White);
-
-            //DXManager.Sprite.End();
-            DXManager.Sprite_End();
-            //DXManager.Sprite.Begin(SpriteFlags.AlphaBlend);
-            DXManager.SpriteBegin_AlphaBlend();
         }
 
         private static void OnMouseClick(object sender, EventArgs e)
@@ -12662,6 +12673,13 @@ namespace Client.MirScenes
 
             if (disposing)
             {
+                if (_sceneTexture != null)
+                {
+                    DXManager.ReleaseTargetBitmap(_sceneTexture);
+                    _sceneTexture.Dispose();
+                    _sceneTexture = null;
+                }
+
                 Objects.Clear();
 
                 MapButtons = 0;

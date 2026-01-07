@@ -1,32 +1,8 @@
 ﻿using Client.Resolution;
 using Launcher;
 using System.Diagnostics;
-using System.Drawing;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
-using Vortice.DCommon;
-using Vortice.Direct2D1;
-using Vortice.Direct3D11;
-using Vortice.DXGI;
-using Vortice.Framework;
-using Vortice.Mathematics;
-using Vortice.WinForms;
-using Windows.Win32.Foundation;
-using Windows.Win32.UI.WindowsAndMessaging;
-using static Windows.Win32.PInvoke;
-using static Windows.Win32.UI.WindowsAndMessaging.PEEK_MESSAGE_REMOVE_TYPE;
-using static Windows.Win32.UI.WindowsAndMessaging.SHOW_WINDOW_CMD;
-using static Windows.Win32.UI.WindowsAndMessaging.SYSTEM_METRICS_INDEX;
-using static Windows.Win32.UI.WindowsAndMessaging.WINDOW_EX_STYLE;
-using static Windows.Win32.UI.WindowsAndMessaging.WINDOW_STYLE;
-using static Windows.Win32.UI.WindowsAndMessaging.WNDCLASS_STYLES;
-using AlphaMode = Vortice.DXGI.AlphaMode;
-using D2D = Vortice.Direct2D1;
-using D3D = Vortice.Direct3D;
-using D3D11 = Vortice.Direct3D11;
-using DXGI = Vortice.DXGI;
-//using Vortice.Windows;
 
 namespace Client
 {
@@ -41,20 +17,6 @@ namespace Client
         [STAThread]
         private static void Main(string[] args)
         {
-            //TestVortice.TestVortice1();
-            //TestVortice.TestVortice2();
-            //TestVortice.Test_HelloWindowApp();
-            //TestVortice.Test_TriangleApp();
-            //TestVortice.Test_BufferOffsetsApp();
-            //TestVortice.Test_DrawQuadApp();//闪烁
-            //TestVortice.Test_CubeApp();//3D旋转立方体
-            //TestVortice.Test_CubeAlphaBlendApp();//错误
-            //TestVortice.Test_TexturedCubeApp();//3D旋转立方体
-            //TestVortice.Test_TexturedCubeFromFileApp();//3D旋转立方体
-            //TestVortice.Test_MipmappingApp();//3D旋转立方体，动态糊化
-            //TestVortice.Test_DrawTextApp();//文字
-            //return;
-
             if (args.Length > 0)
             {
                 foreach (var arg in args)
@@ -69,6 +31,8 @@ namespace Client
 
             try
             {
+                System.Windows.Forms.Application.SetHighDpiMode(System.Windows.Forms.HighDpiMode.PerMonitorV2);
+
                 if (UpdatePatcher()) return;
 
                 if (RuntimePolicyHelper.LegacyV2RuntimeEnabledSuccessfully == true) { }

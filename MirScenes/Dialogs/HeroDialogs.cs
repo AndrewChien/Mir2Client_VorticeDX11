@@ -385,7 +385,7 @@ namespace Client.MirScenes.Dialogs
     public sealed class HeroMenuPanel : MirImageControl
     {
         public MirButton HeroMagicsButton, HeroInventoryButton, HeroEquipmentButton;
-        private readonly int clientWidth = Program.Form.ClientSize.Width;
+        private readonly int clientWidth = Settings.ScreenWidth;
         public HeroMenuPanel(MirControl parent)
         {
             Index = 2179;
@@ -395,11 +395,11 @@ namespace Client.MirScenes.Dialogs
            
             if (clientWidth == 800)
             {
-                Location = new Point((clientWidth / 2) - (Size.Width / 2) + 250, Program.Form.ClientSize.Height - Size.Height - 77);
+                Location = new Point((clientWidth / 2) - (Size.Width / 2) + 250, Settings.ScreenHeight - Size.Height - 77);
             }
             else
             {
-                Location = new Point((clientWidth / 2) - (Size.Width / 2) + 362, Program.Form.ClientSize.Height - Size.Height - 77);
+                Location = new Point((clientWidth / 2) - (Size.Width / 2) + 362, Settings.ScreenHeight - Size.Height - 77);
             }
 
             HeroMagicsButton = new MirButton

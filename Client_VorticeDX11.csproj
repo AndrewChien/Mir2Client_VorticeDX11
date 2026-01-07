@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
+		<AssemblyName>Client</AssemblyName>
 		<OutputType>WinExe</OutputType>
 		<TargetFramework>net8.0-windows</TargetFramework>
 		<Nullable>disable</Nullable>
@@ -88,7 +89,6 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Shared\Shared.csproj" />
-		<ProjectReference Include="..\Vortice.Framework\Vortice.Framework.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

@@ -26,10 +26,8 @@ namespace Client.MirControls
             set { base.Size = value; }
         }
 
-        public override void Draw() //由 CMain.RenderEnvironment() 触发
+        public override void Draw() 
         {
-            CMain.SaveError(DXManager.PrintParentMethod() + $"MirScene开始Draw()");
-
             if (IsDisposed || !Visible)
                 return;
 
@@ -37,17 +35,12 @@ namespace Client.MirControls
 
             if(ControlTexture!=null)
             {
-                ////debug:此处引发红屏
-                //CMain.SaveError($"子类MirScene.Draw()→DrawControl()：{ControlTexture.NativePointer}-{ControlTexture.Description.BindFlags}-{ControlTexture.Description.CPUAccessFlags}" +
-                //    $"-{ControlTexture.Description.Format}-{ControlTexture.Description.MiscFlags}-{ControlTexture.Description.Usage}," +
-                //    $"0-0-{Size.Width}-{Size.Height},{DisplayLocation.X}-{DisplayLocation.Y}-0,{Color.White},{Opacity}");
+
             }
             else
             {
-                ////debug:此处引发红屏
-                //CMain.SaveError($"子类MirScene.Draw()→DrawControl()：null ControlTexture !!!");
+
             }
-            //TextureValid = true;
             DrawControl();
 
             if (CMain.DebugBaseLabel != null && !CMain.DebugBaseLabel.IsDisposed)
@@ -57,53 +50,37 @@ namespace Client.MirControls
                 CMain.HintBaseLabel.Draw();
 
             OnShown();
-
-            CMain.SaveError($"MirScene结束Draw()");
         }
 
         protected override void CreateTexture()
         {
-            CMain.SaveError(DXManager.PrintParentMethod() + $"MirScene开始CreateTexture()");
-
             if (Size != TextureSize)
             {
-                //debug:
-                //CMain.SaveError($"子类MirScene.CreateTexture()：因Size子{Size.Width}-{Size.Height}父{TextureSize.Width}-{TextureSize.Height}不一致dispose纹理");
                 DisposeTexture();
             }
 
             if (ControlTexture == null)
             {
                 DXManager.ControlList.Add(this);
-                //ControlTexture = new Texture(DXManager.Device, Size.Width, Size.Height, 1, Usage.RenderTarget, Format.A8R8G8B8, Pool.Default);
                 ControlTexture = DXManager.NewTexture_RenderTarget_Default((uint)Size.Width, (uint)Size.Height);
                 TextureSize = Size;
             }
             var oldSurface = DXManager.CurrentSurface;
-            //var surface = ControlTexture.GetSurfaceLevel(0);
             var surface = DXManager.GetSurfaceLevel(ControlTexture, 0);
             DXManager.SetSurface(ref surface);
 
-            //DXManager.Device.Clear(ClearFlags.Target, BackColour, 0, 0);
             DXManager.DeviceClear_Target(BackColour);
 
             BeforeDrawControl();
             DrawChildControls();
             AfterDrawControl();
 
-            //DXManager.Sprite.Flush();
             DXManager.Sprite_Flush();
 
             DXManager.SetSurface(ref oldSurface);
             TextureValid = true;
             surface.Dispose();
 
-            ////debug:
-            //CMain.SaveError($"子类MirScene.CreateTexture()：{ControlTexture.NativePointer}-{ControlTexture.Description.BindFlags}-{ControlTexture.Description.CPUAccessFlags}" +
-            //    $"-{ControlTexture.Description.Format}-{ControlTexture.Description.MiscFlags}-{ControlTexture.Description.Usage}," +
-            //    $"{TextureSize.Width}-{TextureSize.Height},SetSurface-清屏-SetSurface完成");
-
-            CMain.SaveError($"MirScene结束CreateTexture()");
         }
 
         public override void OnMouseDown(MouseEventArgs e)
