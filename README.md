@@ -1,6 +1,13 @@
 # Mir2Client_VorticeDX11
-热血传奇水晶客户端中文版，使用VorticeDX11重制，以便于客户端进行AOT。</br>
-2026-01-08：已消除进入GameScene后画面闪烁，以及F10快捷键失灵的错误。</br>
+热血传奇水晶客户端中文版，使用VorticeDX11重制，以便于客户端进行AOT。
+</br>
+</br>
+2026-01-08：已消除进入GameScene后画面闪烁，以及F10快捷键失灵的错误。
+</br>
+</br>
+配套资源文件在QQ群共享文件中，群号：1063081017
+</br>
+</br>
 <img src='https://github.com/AndrewChien/Blog/blob/master/source/VorticeDX11.png'/></br>
 
 ---
