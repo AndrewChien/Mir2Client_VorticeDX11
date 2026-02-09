@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.0.11205.157 d18.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shared", "Shared\Shared.csproj", "{ABB9A7A2-DB8C-497F-B67E-C522F812117E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client_VorticeDX11", "Client_VorticeDX11\Client_VorticeDX11.csproj", "{BAA247EA-7B61-DEBC-54FD-206138DDFECD}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{ABB9A7A2-DB8C-497F-B67E-C522F812117E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ABB9A7A2-DB8C-497F-B67E-C522F812117E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ABB9A7A2-DB8C-497F-B67E-C522F812117E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ABB9A7A2-DB8C-497F-B67E-C522F812117E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BAA247EA-7B61-DEBC-54FD-206138DDFECD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BAA247EA-7B61-DEBC-54FD-206138DDFECD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BAA247EA-7B61-DEBC-54FD-206138DDFECD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BAA247EA-7B61-DEBC-54FD-206138DDFECD}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
